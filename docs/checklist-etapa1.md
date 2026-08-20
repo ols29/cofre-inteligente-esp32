@@ -29,7 +29,6 @@ git push -u origin main
 |---|---|---|
 | ESP32 NodeMCU (WROOM-32) | Servidor e controle | R$ 45 |
 | Teclado matricial 4x4 | Sensor: credencial | R$ 15 |
-| Sensor DHT11 | Sensor: temperatura e umidade | R$ 10 |
 | Sensor IR de obstáculo | Sensor: ocupação | R$ 10 |
 | Display OLED 0.96" I2C (SSD1306) | Atuador: estado local | R$ 30 |
 | Servo motor SG90 | Atuador: trava | R$ 15 |
@@ -37,7 +36,7 @@ git push -u origin main
 | 2 LEDs + 2 resistores 220Ω | Atuador: indicação | R$ 3 |
 | Capacitor eletrolítico 470 µF / 16V | Estabilização do servo | R$ 2 |
 | Protoboard 400 pontos + jumpers | Montagem | R$ 30 |
-| **Total** | | **~R$ 164** |
+| **Total** | | **~R$ 154** |
 
 Comprar dois ESP32, se o orçamento permitir. A FAQ 4 trata de falha de hardware na véspera.
 
@@ -57,7 +56,6 @@ Fornecedores em Curitiba: Baú da Eletrônica, Eletrônica Sanches. Online: Make
 | OLED, VCC / GND | 3V3 / GND | |
 | Servo, sinal (laranja) | GPIO 4 | |
 | Servo, VCC / GND | 5V / GND | GND comum, capacitor 470 µF |
-| DHT11, dados | GPIO 19 | Resistor pull-up 10 kΩ se o módulo não tiver |
 | Sensor IR, saída | GPIO 18 | Saída em LOW quando detecta objeto |
 | Buzzer (+) | GPIO 15 | |
 | LED verde | GPIO 2 | Resistor 220Ω |
@@ -72,7 +70,6 @@ Não monte tudo de uma vez. Cada item abaixo com um sketch de exemplo separado.
 - [ ] **Servo:** alternar 0° e 90°. Se o ESP32 reiniciar, instalar o capacitor e conferir o GND comum.
 - [ ] **OLED:** exibir texto. Se não acender, rodar um scanner I2C: alguns módulos usam `0x3D`.
 - [ ] **Teclado:** imprimir a tecla no Serial Monitor. Se a tecla sair trocada, inverter os arrays de linhas e colunas.
-- [ ] **DHT11:** imprimir temperatura e umidade. Leituras `NaN` ocasionais são normais.
 - [ ] **Sensor IR:** imprimir o estado do pino. Ajustar o potenciômetro do módulo para a distância desejada.
 - [ ] **Buzzer e LEDs:** conferir polaridade.
 
@@ -82,7 +79,7 @@ Não monte tudo de uma vez. Cada item abaixo com um sketch de exemplo separado.
 - [ ] Compilar e enviar `src/esp32/etapa1_prova_conceito/etapa1_prova_conceito.ino`
 - [ ] Confirmar que o Serial Monitor mostra leituras a cada 2 segundos
 
-Bibliotecas necessárias: `Keypad`, `ESP32Servo`, `Adafruit SSD1306`, `Adafruit GFX`, `DHT sensor library`.
+Bibliotecas necessárias: `Keypad`, `ESP32Servo`, `Adafruit SSD1306`, `Adafruit GFX`.
 
 ## 7. Critérios de aceite
 
@@ -93,10 +90,8 @@ Sete comportamentos, todos sem rede:
 - [ ] Digitar senha errada três vezes → OLED mostra BLOQUEADO, buzzer intermitente
 - [ ] Após 30 segundos → bloqueio se encerra sozinho
 - [ ] Durante o bloqueio, o teclado ignora qualquer tecla
-- [ ] Rodapé do OLED mostra temperatura, umidade e ocupação atualizando
+- [ ] Rodapé do OLED mostra a ocupação atualizando
 - [ ] Aproximar a mão do sensor IR → rodapé muda de "vazio" para "cheio"
-
-Teste extra do alarme térmico: aproximar algo morno do DHT11 até passar de 40°C. O OLED deve mostrar ALERTA e o buzzer apitar mais rápido que no bloqueio.
 
 ## 8. Registro
 

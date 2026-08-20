@@ -15,7 +15,7 @@ Armários e cofres trancados por chave física não registram nada. Não se sabe
 
 **2. Que ação corretiva podemos disparar com um atuador?**
 
-O travamento e destravamento por servo motor, o bloqueio temporário após tentativas repetidas, o alarme sonoro por superaquecimento, e o estado exibido em display OLED no próprio equipamento, com LEDs indicando a situação da trava.
+O travamento e destravamento por servo motor, o bloqueio temporário após tentativas repetidas, e o estado exibido em display OLED no próprio equipamento, com LEDs indicando a situação da trava.
 
 **3. Como os dados e comandos serão trocados pela rede?**
 
@@ -29,7 +29,7 @@ O ESP32 opera como servidor HTTP na porta 80, em modo Access Point. A aplicaçã
 - Trava por servo motor com fechamento automático temporizado
 - Bloqueio de 30 segundos após três tentativas incorretas
 - Detecção de ocupação do compartimento por sensor infravermelho
-- Display OLED com o estado local e as leituras ambientais
+- Display OLED com o estado local e a ocupação do compartimento
 - Servidor HTTP no ESP32 em modo Access Point
 - Interface web para consulta de estado, envio de comandos e visualização do registro de eventos
 - Registro dos últimos 20 eventos em memória, com origem e instante
