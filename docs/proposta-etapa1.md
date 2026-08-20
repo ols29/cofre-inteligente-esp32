@@ -63,6 +63,17 @@ Dois projetos foram consultados como contraexemplo deliberado. Em ambos o ESP32 
 | 2. Comunicação e firmware servidor | Servidor HTTP no ESP32, rotas validadas via cURL |
 | 3. Integração final | Interface cliente, testes de falha, apresentação |
 
+## Melhorias planejadas (etapas 2 e 3)
+
+Evolução do cofre para um controle de acesso multiusuário, a ser construído nas próximas etapas:
+
+- Cadastro de usuários com papéis (administrador e comum)
+- Administração pelo admin: reset de senha, criar e remover usuários, gerenciar funções
+- Usuários temporários, com validade
+- Liberação por horário
+- Interface web protegida por autenticação, com bloqueio por tentativas (lockout)
+- Acionamento e controle de acesso da porta pelo teclado e pela interface web
+
 ## Repositório
 
 https://github.com/ols29/cofre-inteligente-esp32
