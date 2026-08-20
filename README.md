@@ -164,7 +164,7 @@ Depois instale, pelo Gerenciador de Bibliotecas:
 - `Adafruit SSD1306`
 - `Adafruit GFX Library`
 
-Selecione a placa **ESP32 Dev Module**, abra `src/esp32/esp32_server.ino` e envie para a placa.
+Selecione a placa **ESP32 Dev Module**, abra `src/esp32/esp32_server/esp32_server.ino` e envie para a placa.
 
 ### 2. Acesso ao sistema
 
@@ -223,12 +223,15 @@ Essas limitações são conscientes e delimitadas pelo escopo da disciplina.
 ```
 cofre-inteligente-esp32/
 ├── docs/
-│   ├── arquitetura.png
-│   ├── esquematico.png
-│   └── maquina-estados.png
+│   ├── arquitetura.svg
+│   ├── proposta-etapa1.md
+│   └── checklist-etapa1.md
 ├── src/
 │   ├── esp32/
-│   │   └── esp32_server.ino
+│   │   ├── esp32_server/
+│   │   │   └── esp32_server.ino
+│   │   └── etapa1_prova_conceito/
+│   │       └── etapa1_prova_conceito.ino
 │   └── client/
 │       ├── index.html
 │       └── app.js
