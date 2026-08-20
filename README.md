@@ -11,14 +11,6 @@ Armários, cofres e salas técnicas trancados por chave física não deixam rast
 
 Este projeto demonstra, em escala de protótipo, uma trava eletrônica que resolve os três pontos: autentica por senha local, aceita comando remoto pela rede e mantém um registro dos eventos.
 
-## Integrantes da equipe
-
-| Nome completo | RA |
-|---|---|
-|  |  |
-|  |  |
-|  |  |
-
 ## Arquitetura da solução
 
 ```
