@@ -11,12 +11,11 @@
  * A camada de servidor HTTP entra apenas na Etapa 2, sobre esta base.
  *
  * SENSORES : teclado matricial 4x4 (credencial)
- *            DHT11 (temperatura e umidade internas)
  *            sensor IR de obstaculo (ocupacao do compartimento)
  * ATUADORES: servo SG90 (trava), buzzer, LED verde, LED vermelho, OLED
  *
  * BIBLIOTECAS:
- *   Keypad, ESP32Servo, Adafruit SSD1306, Adafruit GFX, DHT sensor library
+ *   Keypad, ESP32Servo, Adafruit SSD1306, Adafruit GFX
  * ============================================================================
  */
 
@@ -25,7 +24,6 @@
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
-#include <DHT.h>
 
 // ---------------------------------------------------------------------------
 // PINOS
@@ -34,14 +32,11 @@
 #define PINO_BUZZER    15
 #define PINO_LED_VERDE 2
 #define PINO_LED_VERM  5
-#define PINO_DHT       19
 #define PINO_IR        18
 
 #define OLED_LARGURA  128
 #define OLED_ALTURA    64
 #define OLED_ENDERECO 0x3C
-
-#define TIPO_DHT DHT11
 
 const byte LINHAS = 4;
 const byte COLUNAS = 4;
@@ -57,7 +52,6 @@ byte pinosColunas[COLUNAS] = {26, 25, 33, 32};
 Keypad teclado = Keypad(makeKeymap(teclas), pinosLinhas, pinosColunas, LINHAS, COLUNAS);
 Servo servoTrava;
 Adafruit_SSD1306 display(OLED_LARGURA, OLED_ALTURA, &Wire, -1);
-DHT dht(PINO_DHT, TIPO_DHT);
 
 // ---------------------------------------------------------------------------
 // PARAMETROS
@@ -67,8 +61,6 @@ DHT dht(PINO_DHT, TIPO_DHT);
 #define MAX_TENTATIVAS     3
 #define TEMPO_BLOQUEIO 30000UL
 #define TEMPO_ABERTO   10000UL
-#define INTERVALO_DHT   2000UL     // DHT11 nao aceita leitura mais rapida
-#define LIMITE_TEMP      40.0      // alarme termico em graus Celsius
 
 enum EstadoCofre { TRANCADO, DIGITANDO, ABERTO, BLOQUEADO };
 EstadoCofre estado = TRANCADO;
@@ -77,16 +69,12 @@ const String SENHA = "1234";
 String senhaDigitada = "";
 int    tentativasErradas = 0;
 
-float temperatura = 0.0;
-float umidade     = 0.0;
 bool  ocupado     = false;
-bool  alarmeTermico = false;
 
 unsigned long marcoBloqueio = 0;
 unsigned long marcoAbertura = 0;
 unsigned long marcoBuzzer   = 0;
 unsigned long marcoDisplay  = 0;
-unsigned long marcoDht      = 0;
 bool          buzzerLigado  = false;
 
 // ---------------------------------------------------------------------------
@@ -122,29 +110,16 @@ void entrarEmBloqueio() {
 }
 
 // ---------------------------------------------------------------------------
-// LEITURA DOS SENSORES AMBIENTAIS
+// LEITURA DO SENSOR DE OCUPACAO
 // ---------------------------------------------------------------------------
 void lerSensores() {
-  unsigned long agora = millis();
-  if (agora - marcoDht < INTERVALO_DHT) return;
-  marcoDht = agora;
-
-  float t = dht.readTemperature();
-  float u = dht.readHumidity();
-
-  // O DHT11 falha em algumas leituras; descartamos NaN e mantemos a anterior
-  if (!isnan(t)) temperatura = t;
-  if (!isnan(u)) umidade = u;
-
-  alarmeTermico = (temperatura >= LIMITE_TEMP);
-
   // Modulo IR: saida em LOW quando ha objeto na frente
-  ocupado = (digitalRead(PINO_IR) == LOW);
-
-  Serial.print("[SENSOR] ");
-  Serial.print(temperatura); Serial.print("C  ");
-  Serial.print(umidade);     Serial.print("%  ");
-  Serial.println(ocupado ? "ocupado" : "vazio");
+  bool ocupadoAgora = (digitalRead(PINO_IR) == LOW);
+  if (ocupadoAgora != ocupado) {
+    ocupado = ocupadoAgora;
+    Serial.print("[SENSOR] compartimento ");
+    Serial.println(ocupado ? "ocupado" : "vazio");
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -162,57 +137,47 @@ void atualizarDisplay() {
   display.setTextSize(2);
   display.setCursor(0, 16);
 
-  if (alarmeTermico) {
-    display.println("ALERTA");
-    display.setTextSize(1);
-    display.setCursor(0, 38);
-    display.print("Temperatura ");
-    display.print(temperatura, 1);
-    display.println("C");
-  } else {
-    switch (estado) {
-      case TRANCADO:
-        display.println("TRANCADO");
-        display.setTextSize(1);
-        display.setCursor(0, 38);
-        display.println("Digite a senha");
-        break;
+  switch (estado) {
+    case TRANCADO:
+      display.println("TRANCADO");
+      display.setTextSize(1);
+      display.setCursor(0, 38);
+      display.println("Digite a senha");
+      break;
 
-      case DIGITANDO: {
-        String mascara = "";
-        for (unsigned int i = 0; i < senhaDigitada.length(); i++) mascara += "*";
-        display.println(mascara);
-        display.setTextSize(1);
-        display.setCursor(0, 38);
-        display.print("# confirma  * apaga");
-        break;
-      }
-
-      case ABERTO:
-        display.println("ABERTO");
-        display.setTextSize(1);
-        display.setCursor(0, 38);
-        display.print("Fecha em ");
-        display.print((TEMPO_ABERTO - (millis() - marcoAbertura)) / 1000);
-        display.println("s");
-        break;
-
-      case BLOQUEADO:
-        display.println("BLOQUEADO");
-        display.setTextSize(1);
-        display.setCursor(0, 38);
-        display.print("Aguarde ");
-        display.print((TEMPO_BLOQUEIO - (millis() - marcoBloqueio)) / 1000);
-        display.println("s");
-        break;
+    case DIGITANDO: {
+      String mascara = "";
+      for (unsigned int i = 0; i < senhaDigitada.length(); i++) mascara += "*";
+      display.println(mascara);
+      display.setTextSize(1);
+      display.setCursor(0, 38);
+      display.print("# confirma  * apaga");
+      break;
     }
+
+    case ABERTO:
+      display.println("ABERTO");
+      display.setTextSize(1);
+      display.setCursor(0, 38);
+      display.print("Fecha em ");
+      display.print((TEMPO_ABERTO - (millis() - marcoAbertura)) / 1000);
+      display.println("s");
+      break;
+
+    case BLOQUEADO:
+      display.println("BLOQUEADO");
+      display.setTextSize(1);
+      display.setCursor(0, 38);
+      display.print("Aguarde ");
+      display.print((TEMPO_BLOQUEIO - (millis() - marcoBloqueio)) / 1000);
+      display.println("s");
+      break;
   }
 
-  // Rodape com as leituras ambientais
+  // Rodape com a ocupacao do compartimento
   display.setTextSize(1);
   display.setCursor(0, 48);
-  display.print(temperatura, 1); display.print("C ");
-  display.print(umidade, 0);     display.print("% ");
+  display.print("Compartimento: ");
   display.print(ocupado ? "cheio" : "vazio");
 
   display.setCursor(0, 57);
@@ -282,8 +247,6 @@ void setup() {
   servoTrava.write(ANGULO_TRANCADO);
   digitalWrite(PINO_LED_VERM, HIGH);
 
-  dht.begin();
-
   if (!display.begin(SSD1306_SWITCHCAPVCC, OLED_ENDERECO)) {
     Serial.println("[ERRO] Display OLED nao respondeu. Confira SDA/SCL e o endereco I2C.");
   }
@@ -314,11 +277,9 @@ void loop() {
     }
   }
 
-  // Buzzer intermitente: alarme termico tem prioridade sobre o bloqueio
-  bool deveApitar = alarmeTermico || (estado == BLOQUEADO);
-  if (deveApitar) {
-    unsigned long intervalo = alarmeTermico ? 250 : 500;
-    if (agora - marcoBuzzer >= intervalo) {
+  // Buzzer intermitente durante o bloqueio
+  if (estado == BLOQUEADO) {
+    if (agora - marcoBuzzer >= 500) {
       buzzerLigado = !buzzerLigado;
       digitalWrite(PINO_BUZZER, buzzerLigado ? HIGH : LOW);
       marcoBuzzer = agora;
