@@ -5,20 +5,13 @@
 
 ## Integrantes
 
-| Nome completo | RA | Papel |
-|---|---|---|
-|  | | Hardware e firmware |
-|  | | Protocolos e conectividade |
-|  | | Interface e integração |
-|  | | Documentação e qualidade |
-
-Todos os integrantes participam do firmware, do protocolo e da documentação. A divisão acima indica responsabilidade principal, não exclusividade.
+Gustavo, Luiz, Nicolas, Oliver.
 
 ## As três perguntas da seção 3.1
 
 **1. Que problema real podemos monitorar com um sensor?**
 
-Armários e cofres trancados por chave física não registram nada. Não se sabe quem abriu, quando, nem quantas tentativas malsucedidas houve antes, nem em que condições o conteúdo está guardado. O teclado matricial monitora a entrada de credencial, o DHT11 monitora temperatura e umidade internas, e um sensor infravermelho de obstáculo indica se há algo armazenado.
+Armários e cofres trancados por chave física não registram nada. Não se sabe quem abriu, quando, nem quantas tentativas malsucedidas houve antes, nem em que condições o conteúdo está guardado. O teclado matricial monitora a entrada de credencial e um sensor infravermelho de obstáculo indica se há algo armazenado.
 
 **2. Que ação corretiva podemos disparar com um atuador?**
 
@@ -35,7 +28,6 @@ O ESP32 opera como servidor HTTP na porta 80, em modo Access Point. A aplicaçã
 - Autenticação por senha em teclado matricial 4x4
 - Trava por servo motor com fechamento automático temporizado
 - Bloqueio de 30 segundos após três tentativas incorretas
-- Monitoramento de temperatura e umidade internas, com alarme acima de 40 °C
 - Detecção de ocupação do compartimento por sensor infravermelho
 - Display OLED com o estado local e as leituras ambientais
 - Servidor HTTP no ESP32 em modo Access Point
@@ -44,12 +36,10 @@ O ESP32 opera como servidor HTTP na porta 80, em modo Access Point. A aplicaçã
 
 **Fora do escopo (declarado deliberadamente):**
 
-- RFID, biometria e reconhecimento facial
 - Persistência em banco de dados ou serviço externo
 - Placa de circuito impresso dedicada
 - HTTPS e autenticação por token
-
-A exclusão segue a recomendação da seção 3.4 quanto a escopos amplos demais para o prazo do semestre.
+- Cartão de aproximação
 
 ## Referências consultadas
 
@@ -67,11 +57,11 @@ Dois projetos foram consultados como contraexemplo deliberado. Em ambos o ESP32 
 
 ## Cronograma
 
-| Etapa | Entrega | Prazo |
-|---|---|---|
-| 1. Planejamento e arquitetura | Proposta, repositório, diagrama, prova de conceito local |  |
-| 2. Comunicação e firmware servidor | Servidor HTTP no ESP32, rotas validadas via cURL |  |
-| 3. Integração final | Interface cliente, testes de falha, apresentação |  |
+| Etapa | Entrega |
+|---|---|
+| 1. Planejamento e arquitetura | Proposta, repositório, diagrama, prova de conceito local |
+| 2. Comunicação e firmware servidor | Servidor HTTP no ESP32, rotas validadas via cURL |
+| 3. Integração final | Interface cliente, testes de falha, apresentação |
 
 ## Repositório
 
