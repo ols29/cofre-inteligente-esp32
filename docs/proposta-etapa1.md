@@ -1,16 +1,16 @@
-# Proposta de tema — Etapa 1
+# Proposta de tema: Etapa 1
 
-**Disciplina:** Conectividade em Sistemas Ciberfísicos — PUCPR
+**Disciplina:** Conectividade em Sistemas Ciberfísicos, PUCPR
 **Título:** Cofre inteligente com autenticação local e controle em rede
 
 ## Integrantes
 
 | Nome completo | RA | Papel |
 |---|---|---|
-| *(preencher)* | | Hardware e firmware |
-| *(preencher)* | | Protocolos e conectividade |
-| *(preencher)* | | Interface e integração |
-| *(preencher)* | | Documentação e qualidade |
+|  | | Hardware e firmware |
+|  | | Protocolos e conectividade |
+|  | | Interface e integração |
+|  | | Documentação e qualidade |
 
 Todos os integrantes participam do firmware, do protocolo e da documentação. A divisão acima indica responsabilidade principal, não exclusividade.
 
@@ -55,24 +55,24 @@ A exclusão segue a recomendação da seção 3.4 quanto a escopos amplos demais
 
 O projeto foi desenvolvido pela equipe. Os repositórios abaixo foram consultados como referência de arquitetura e boas práticas de montagem, sem reaproveitamento de código:
 
-- Hotsunlok/ESP32-smart-door-system — organização da documentação e ideia do temporizador visível de fechamento automático
-- lamkhanhnha353/IoT_smart-locker — validação independente do mapeamento de pinos, lógica de entrada de PIN e uso de DHT11 com alarme térmico
-- MobiXaiph/Door-lock-System-with-Keypad — validação da prova de conceito local com teclado, servo e realimentação visual e sonora
-- RohanKini18/ESP32-Servo-Motor-controller-Captive-portal — operação em modo Access Point sem roteador e cuidados de alimentação do servo
+- Hotsunlok/ESP32-smart-door-system: organização da documentação e ideia do temporizador visível de fechamento automático
+- lamkhanhnha353/IoT_smart-locker: validação independente do mapeamento de pinos, lógica de entrada de PIN e uso de DHT11 com alarme térmico
+- MobiXaiph/Door-lock-System-with-Keypad: validação da prova de conceito local com teclado, servo e realimentação visual e sonora
+- RohanKini18/ESP32-Servo-Motor-controller-Captive-portal: operação em modo Access Point sem roteador e cuidados de alimentação do servo
 
 Dois projetos foram consultados como contraexemplo deliberado. Em ambos o ESP32 atua apenas como cliente de um serviço externo, o que não atende ao requisito da seção 4.3 do regulamento:
 
-- lamkhanhnha353/IoT_smart-locker — telemetria por MQTT em broker público
-- Dubemchukwu/Iot-Door-Lock-System — backend hospedado em nuvem intermediando o painel
+- lamkhanhnha353/IoT_smart-locker: telemetria por MQTT em broker público
+- Dubemchukwu/Iot-Door-Lock-System: backend hospedado em nuvem intermediando o painel
 
 ## Cronograma
 
 | Etapa | Entrega | Prazo |
 |---|---|---|
-| 1 — Planejamento e arquitetura | Proposta, repositório, diagrama, prova de conceito local | *(preencher)* |
-| 2 — Comunicação e firmware servidor | Servidor HTTP no ESP32, rotas validadas via cURL | *(preencher)* |
-| 3 — Integração final | Interface cliente, testes de falha, apresentação | *(preencher)* |
+| 1. Planejamento e arquitetura | Proposta, repositório, diagrama, prova de conceito local |  |
+| 2. Comunicação e firmware servidor | Servidor HTTP no ESP32, rotas validadas via cURL |  |
+| 3. Integração final | Interface cliente, testes de falha, apresentação |  |
 
 ## Repositório
 
-*(inserir o link após a criação)*
+https://github.com/ols29/cofre-inteligente-esp32

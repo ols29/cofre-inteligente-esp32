@@ -1,9 +1,9 @@
-# Cofre Inteligente — Sistema Ciberfísico com ESP32
+# Cofre Inteligente: Sistema Ciberfísico com ESP32
 
 Trava eletrônica com dois caminhos de autenticação independentes (teclado físico e rede local) e registro de eventos consultável remotamente.
 
 **Disciplina:** Conectividade em Sistemas Ciberfísicos
-**Curso:** Engenharia de Software — PUCPR
+**Curso:** Engenharia de Software, PUCPR
 
 ## Problema
 
@@ -15,9 +15,9 @@ Este projeto demonstra, em escala de protótipo, uma trava eletrônica que resol
 
 | Nome completo | RA |
 |---|---|
-| *(preencher)* | *(preencher)* |
-| *(preencher)* | *(preencher)* |
-| *(preencher)* | *(preencher)* |
+|  |  |
+|  |  |
+|  |  |
 
 ## Arquitetura da solução
 
@@ -43,12 +43,6 @@ Este projeto demonstra, em escala de protótipo, uma trava eletrônica que resol
 +-------------------------------------------------------+
 ```
 
-O ESP32 opera em modo **Access Point**: cria a própria rede Wi-Fi e não depende de roteador externo nem de acesso à internet.
-
-- **Rede:** `CofreESP32`
-- **Senha:** `pucpr2026`
-- **Endereço:** `http://192.168.4.1`
-
 ## Hardware utilizado
 
 | Componente | Função | Preço aprox. |
@@ -66,13 +60,13 @@ O ESP32 opera em modo **Access Point**: cria a própria rede Wi-Fi e não depend
 
 | Componente | Pino do ESP32 | Observação |
 |---|---|---|
-| Teclado — linhas R1 a R4 | GPIO 13, 12, 14, 27 | |
-| Teclado — colunas C1 a C4 | GPIO 26, 25, 33, 32 | |
-| OLED — SDA | GPIO 21 | I2C, endereço `0x3C` |
-| OLED — SCL | GPIO 22 | |
-| OLED — VCC / GND | 3V3 / GND | |
-| Servo — sinal (laranja) | GPIO 4 | |
-| Servo — VCC / GND | 5V / GND | GND comum com o ESP32 |
+| Teclado, linhas R1 a R4 | GPIO 13, 12, 14, 27 | |
+| Teclado, colunas C1 a C4 | GPIO 26, 25, 33, 32 | |
+| OLED, SDA | GPIO 21 | I2C, endereço `0x3C` |
+| OLED, SCL | GPIO 22 | |
+| OLED, VCC / GND | 3V3 / GND | |
+| Servo, sinal (laranja) | GPIO 4 | |
+| Servo, VCC / GND | 5V / GND | GND comum com o ESP32 |
 | Buzzer (+) | GPIO 15 | |
 | LED verde | GPIO 2 | Resistor 220Ω em série |
 | LED vermelho | GPIO 5 | Resistor 220Ω em série |
@@ -81,7 +75,7 @@ O ESP32 opera em modo **Access Point**: cria a própria rede Wi-Fi e não depend
 
 - Os GPIO 6 a 11 são usados pela memória flash interna e não podem ser utilizados.
 - O servo SG90 provoca um pico de corrente ao iniciar o movimento. Se o ESP32 reiniciar sozinho durante o acionamento, alimente o servo por fonte externa de 5V mantendo o **GND comum** com a placa.
-- Se o display não inicializar, confirme o endereço I2C com um sketch de varredura — alguns módulos usam `0x3D`.
+- Se o display não inicializar, confirme o endereço I2C com um sketch de varredura, pois alguns módulos usam `0x3D`.
 
 ## Documentação da API
 
@@ -211,7 +205,7 @@ Senha padrão de fábrica: `1234`.
 
 ## Decisões de projeto
 
-**Por que HTTP e não TCP ou UDP.** A interação é de requisição e resposta, sem fluxo contínuo: o cliente pergunta o estado, o servidor responde. HTTP entrega isso sem nenhuma camada extra, permite testar cada rota com `curl` e dispensa aplicativo próprio — qualquer navegador serve de cliente. TCP faria sentido se houvesse necessidade de conexão persistente com notificação do servidor para o cliente; UDP, se houvesse telemetria contínua em que perder um pacote fosse tolerável.
+**Por que HTTP e não TCP ou UDP.** A interação é de requisição e resposta, sem fluxo contínuo: o cliente pergunta o estado, o servidor responde. HTTP entrega isso sem nenhuma camada extra, permite testar cada rota com `curl` e dispensa aplicativo próprio: qualquer navegador serve de cliente. TCP faria sentido se houvesse necessidade de conexão persistente com notificação do servidor para o cliente; UDP, se houvesse telemetria contínua em que perder um pacote fosse tolerável.
 
 **Por que Access Point e não Station.** Em modo AP o sistema funciona em qualquer lugar, sem depender de credenciais de rede de terceiros nem de um roteador disponível. Isso também reproduz o cenário real de uma trava instalada em local sem infraestrutura de rede.
 
@@ -253,5 +247,3 @@ cofre-inteligente-esp32/
 ## Uso de inteligência artificial
 
 Conforme a seção 9 do regulamento da disciplina, a equipe registra que utilizou ferramentas de IA generativa como apoio na estruturação da documentação e no esclarecimento de dúvidas conceituais. Todo o código foi revisado, testado no hardware físico e é compreendido integralmente pelos integrantes, que se responsabilizam por ele na defesa técnica.
-
-*(Ajustar este parágrafo conforme o uso real da equipe.)*
