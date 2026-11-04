@@ -21,19 +21,16 @@ build/
 .vscode/launch.json
 .vscode/ipch/
 
-# === Editores / diversos ===
+# === Editores e arquivos temporários ===
 *.log
 *.tmp
+*.bak
+*.swp
 *~
 
-# === Configuracoes locais e credenciais ===
+# === Configurações locais e credenciais ===
 .env
 .env.*
 !.env.example
 secrets.h
 arduino_secrets.h
-
-# === Arquivos temporarios ===
-*.bak
-*.swp
-.DS_Store
