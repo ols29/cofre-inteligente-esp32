@@ -1,6 +1,6 @@
 # Vault32 — Sistema Inteligente de Controle de Acesso
 
-Projeto desenvolvido para a disciplina de Conectividade em Sistemas Ciberfísicos, do curso de Engenharia de Software da PUCPR.
+Projeto desenvolvido para a disciplina de **Conectividade em Sistemas Ciberfísicos**, do curso de Engenharia de Software da PUCPR.
 
 O Vault32 é um sistema de controle de acesso físico baseado no microcontrolador ESP32. O projeto combina autenticação local por senha e identificação RFID com uma interface web para monitoramento e acionamento remoto da trava.
 
@@ -37,7 +37,7 @@ Desenvolver um protótipo de controle de acesso que integre hardware, firmware e
 | RFID RC522 | Identificação de cartões e tags |
 | Servo motor SG90 | Acionamento da trava |
 | LCD 16x2 I2C | Exibição de informações |
-| LED | Indicação visual de estado |
+| LED | Indicação visual do estado |
 
 ## Arquitetura do sistema
 
@@ -101,10 +101,51 @@ O firmware utiliza a comunicação serial para apresentar informações e evento
 
 A interface web disponibiliza a consulta do estado atual, quantidade de tentativas inválidas e tempo restante de bloqueio, quando aplicável.
 
+## Tecnologias e bibliotecas
+
+- C++
+- Arduino IDE
+- ESP32
+- Wi-Fi
+- HTTP
+- WebServer
+- ESP32Servo
+- Adafruit Keypad
+- LiquidCrystal_I2C
+- MFRC522
+- SPI
+- Wire
+
 ## Estrutura do projeto
 
 ```text
-Vault32/
-├── README.md
-└── firmware/
-    └── Vault32.ino
+cofre-inteligente-esp32/
+├── docs/
+│   ├── apresentacao-roteiro.md
+│   ├── arquitetura.svg
+│   ├── checklist-etapa1.md
+│   └── proposta-etapa1.md
+├── src/
+│   ├── client/
+│   │   ├── app.js
+│   │   └── index.html
+│   └── esp32/
+│       ├── esp32_server/
+│       │   └── esp32_server.ino
+│       └── etapa1_prova_conceito/
+│           └── etapa1_prova_conceito.ino
+├── .gitignore
+└── README.md
+```
+
+## Limitações e melhorias futuras
+
+- Implementar armazenamento persistente de eventos.
+- Melhorar a segurança da autenticação e da comunicação HTTP.
+- Implementar registro de eventos acessível pela interface web.
+- Adicionar mecanismos de monitoramento e notificações remotas.
+- Aprimorar a interface e a experiência de utilização.
+
+## Considerações finais
+
+O Vault32 demonstra a integração entre sistemas embarcados, controle de hardware e comunicação em rede. O projeto utiliza o ESP32 como controlador e servidor, oferecendo autenticação física e gerenciamento remoto por meio de uma interface web.
