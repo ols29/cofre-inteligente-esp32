@@ -25,3 +25,15 @@ build/
 *.log
 *.tmp
 *~
+
+# === Configuracoes locais e credenciais ===
+.env
+.env.*
+!.env.example
+secrets.h
+arduino_secrets.h
+
+# === Arquivos temporarios ===
+*.bak
+*.swp
+.DS_Store
