@@ -1,494 +1,299 @@
-/*
- * ============================================================================
- * COFRE INTELIGENTE - Sistema Ciberfisico com ESP32
- * ============================================================================
- * Disciplina: Conectividade em Sistemas Ciberfisicos - PUCPR
- *
- * O ESP32 opera como SERVIDOR HTTP (porta 80) em modo Access Point.
- * Dois caminhos de autenticacao independentes:
- *   1) Teclado matricial fisico (senha local)
- *   2) Rede (requisicoes HTTP do cliente web)
- *
- * SENSOR   : Teclado matricial 4x4 (entrada de dados do mundo fisico)
- * ATUADORES: Servo SG90 (trava), buzzer, LEDs verde/vermelho, display OLED
- *
- * BIBLIOTECAS NECESSARIAS (Gerenciador de Bibliotecas da Arduino IDE):
- *   - Keypad            (Mark Stanley / Alexander Brevig)
- *   - ESP32Servo        (Kevin Harrington)
- *   - Adafruit SSD1306  (Adafruit)
- *   - Adafruit GFX      (Adafruit)
- * WiFi.h e WebServer.h ja vem com o core do ESP32.
- * ============================================================================
- */
-
 #include <WiFi.h>
 #include <WebServer.h>
-#include <Keypad.h>
 #include <ESP32Servo.h>
+#include <Adafruit_Keypad.h>
 #include <Wire.h>
-#include <Adafruit_GFX.h>
-#include <Adafruit_SSD1306.h>
+#include <LiquidCrystal_I2C.h>
+#include <SPI.h>
+#include <MFRC522.h>
 
-// ---------------------------------------------------------------------------
-// CONFIGURACAO DA REDE (modo Access Point - nao depende do Wi-Fi da faculdade)
-// ---------------------------------------------------------------------------
-const char* AP_SSID  = "CofreESP32";
-const char* AP_SENHA = "pucpr2026";   // minimo 8 caracteres exigido pelo ESP32
+// ===== CONFIGURAÇÕES =====
+const char* SENHA        = "4567";     // digite no teclado ou na web
+const char* SENHA_ADMIN  = "9090";     // desbloqueia pelo navegador
+const char* WIFI_SSID    = "Vault32";
+const char* WIFI_PASS    = "vault1234";
+const int   MAX_ERROS    = 3;
+const unsigned long TEMPO_ABERTO   = 10000; // 10 s
+const unsigned long TEMPO_BLOQUEIO = 30000; // 30 s
+const int ANG_FECHADO = 0;
+const int ANG_ABERTO  = 90;
 
-WebServer server(80);                  // servidor HTTP escutando na porta 80
+// UIDs autorizados em HEX maiúsculo
+const char* UIDS_AUTORIZADOS[] = {
+  "84 17 D8 06" // seu cartao autorizado
+};
+const int N_UIDS = sizeof(UIDS_AUTORIZADOS) / sizeof(UIDS_AUTORIZADOS[0]);
 
-// ---------------------------------------------------------------------------
-// MAPEAMENTO DE PINOS
-// ---------------------------------------------------------------------------
-#define PINO_SERVO     4
-#define PINO_BUZZER    15
-#define PINO_LED_VERDE 2
-#define PINO_LED_VERM  5
+// ===== PINOS =====
+const int PINO_LED   = 12;
+const int PINO_SERVO = 13;
+const int PINO_SDA   = 21;
+const int PINO_SCL   = 22;
+const int RFID_SS    = 5;
+const int RFID_RST   = 4;
+const int RFID_SCK   = 18;
+const int RFID_MISO  = 19;
+const int RFID_MOSI  = 23;
 
-#define OLED_LARGURA 128
-#define OLED_ALTURA   64
-#define OLED_ENDERECO 0x3C            // endereco I2C padrao do SSD1306
-
-// Teclado matricial 4x4
-const byte LINHAS = 4;
-const byte COLUNAS = 4;
+const byte LINHAS = 3, COLUNAS = 3;
 char teclas[LINHAS][COLUNAS] = {
-  {'1','2','3','A'},
-  {'4','5','6','B'},
-  {'7','8','9','C'},
-  {'*','0','#','D'}
+  {'4','5','6'},
+  {'7','8','9'},
+  {'*','0','#'}
 };
-byte pinosLinhas[LINHAS]   = {13, 12, 14, 27};
-byte pinosColunas[COLUNAS] = {26, 25, 33, 32};
+byte pinosLinhas[LINHAS]   = {32, 14, 27};
+byte pinosColunas[COLUNAS] = {26, 25, 33};
 
-Keypad teclado = Keypad(makeKeymap(teclas), pinosLinhas, pinosColunas, LINHAS, COLUNAS);
-Servo servoTrava;
-Adafruit_SSD1306 display(OLED_LARGURA, OLED_ALTURA, &Wire, -1);
+// ===== OBJETOS =====
+Adafruit_Keypad teclado = Adafruit_Keypad(
+  makeKeymap(teclas), pinosLinhas, pinosColunas, LINHAS, COLUNAS);
+Servo servo;
+WebServer server(80);
+LiquidCrystal_I2C lcd(0x27, 16, 2); // se seu display usar 0x3F, troque aqui
+MFRC522 rfid(RFID_SS, RFID_RST);
 
-// ---------------------------------------------------------------------------
-// PARAMETROS DE OPERACAO
-// ---------------------------------------------------------------------------
-#define ANGULO_TRANCADO   0
-#define ANGULO_ABERTO    90
-#define MAX_TENTATIVAS    3
-#define TEMPO_BLOQUEIO 30000UL         // 30 s de bloqueio apos 3 erros
-#define TEMPO_ABERTO   10000UL         // trava sozinha depois de 10 s aberta
-#define TAM_LOG          20            // eventos guardados no buffer circular
+// ===== ESTADO =====
+enum Estado { FECHADO, ABERTO, BLOQUEADO };
+Estado estado = FECHADO;
+int erros = 0;
+unsigned long tAberto = 0, tBloqueio = 0;
+String digitado = "";
 
-// ---------------------------------------------------------------------------
-// MAQUINA DE ESTADOS
-// ---------------------------------------------------------------------------
-enum EstadoCofre { TRANCADO, DIGITANDO, ABERTO, BLOQUEADO };
-EstadoCofre estado = TRANCADO;
+String ultimaL1 = "", ultimaL2 = "";
+String msgL1 = "", msgL2 = "";
+unsigned long tMsg = 0;
 
-String senhaCorreta = "1234";
-String senhaDigitada = "";
-int    tentativasErradas = 0;
+void registrar(String msg) {
+  Serial.println(String(millis() / 1000) + "s: " + msg);
+}
 
-// Marcadores de tempo (millis) - nunca usamos delay() no loop principal
-unsigned long marcoBloqueio = 0;
-unsigned long marcoAbertura = 0;
-unsigned long marcoBuzzer   = 0;
-bool          buzzerLigado  = false;
+String pad16(String s) {
+  while (s.length() < 16) s += ' ';
+  return s.substring(0, 16);
+}
 
-// ---------------------------------------------------------------------------
-// LOG DE EVENTOS - buffer circular em RAM
-// LIMITACAO CONHECIDA: os registros se perdem ao desligar o ESP32.
-// Persistencia exigiria SPIFFS/EEPROM ou cartao SD (fora do escopo da Etapa 1).
-// ---------------------------------------------------------------------------
-struct Evento {
-  unsigned long tempo;   // millis() no instante do evento
-  String        tipo;    // "abertura", "fechamento", "erro", "bloqueio"
-  String        origem;  // "teclado" ou "rede"
-};
+void mostrarTemp(String a, String b) {
+  msgL1 = a;
+  msgL2 = b;
+  tMsg = millis() + 2000;
+}
 
-Evento log[TAM_LOG];
-int  logInicio = 0;      // indice do evento mais antigo
-int  logTotal  = 0;      // quantos eventos validos existem no buffer
-
-void registrarEvento(String tipo, String origem) {
-  int pos = (logInicio + logTotal) % TAM_LOG;
-  if (logTotal == TAM_LOG) {
-    // buffer cheio: sobrescreve o mais antigo e avanca o inicio
-    pos = logInicio;
-    logInicio = (logInicio + 1) % TAM_LOG;
+void desenharLCD() {
+  String l1, l2;
+  if (millis() < tMsg) {
+    l1 = msgL1;
+    l2 = msgL2;
+  } else if (millis() < 3000) {
+    l1 = "Vault32";
+    l2 = "192.168.4.1";
+  } else if (estado == ABERTO) {
+    long r = (TEMPO_ABERTO - (millis() - tAberto)) / 1000 + 1;
+    l1 = "ACESSO LIBERADO";
+    l2 = "Fecha em " + String(r) + "s";
+  } else if (estado == BLOQUEADO) {
+    long r = (TEMPO_BLOQUEIO - (millis() - tBloqueio)) / 1000 + 1;
+    l1 = "BLOQUEADO";
+    l2 = "Aguarde " + String(r) + "s";
   } else {
-    logTotal++;
+    l1 = "Senha ou cartao";
+    l2 = "";
+    for (unsigned int i = 0; i < digitado.length(); i++) l2 += '*';
+    if (erros > 0) l2 += " E" + String(erros) + "/" + String(MAX_ERROS);
   }
-  log[pos].tempo  = millis();
-  log[pos].tipo   = tipo;
-  log[pos].origem = origem;
+
+  l1 = pad16(l1);
+  l2 = pad16(l2);
+  if (l1 != ultimaL1) { lcd.setCursor(0, 0); lcd.print(l1); ultimaL1 = l1; }
+  if (l2 != ultimaL2) { lcd.setCursor(0, 1); lcd.print(l2); ultimaL2 = l2; }
 }
 
-// ---------------------------------------------------------------------------
-// ACOES FISICAS
-// ---------------------------------------------------------------------------
-void destrancar(String origem) {
-  servoTrava.write(ANGULO_ABERTO);
-  digitalWrite(PINO_LED_VERDE, HIGH);
-  digitalWrite(PINO_LED_VERM, LOW);
-  digitalWrite(PINO_BUZZER, LOW);
-  buzzerLigado = false;
+void abrir(String origem) {
   estado = ABERTO;
-  marcoAbertura = millis();
-  senhaDigitada = "";
-  tentativasErradas = 0;
-  registrarEvento("abertura", origem);
+  erros = 0;
+  tAberto = millis();
+  tMsg = 0;
+  servo.write(ANG_ABERTO);
+  digitalWrite(PINO_LED, HIGH);
+  registrar("ABERTO (" + origem + ")");
 }
 
-void trancar(String origem) {
-  servoTrava.write(ANGULO_TRANCADO);
-  digitalWrite(PINO_LED_VERDE, LOW);
-  digitalWrite(PINO_LED_VERM, HIGH);
-  digitalWrite(PINO_BUZZER, LOW);
-  buzzerLigado = false;
-  estado = TRANCADO;
-  senhaDigitada = "";
-  registrarEvento("fechamento", origem);
+void fechar() {
+  estado = FECHADO;
+  servo.write(ANG_FECHADO);
+  digitalWrite(PINO_LED, LOW);
+  registrar("FECHADO");
 }
 
-void entrarEmBloqueio() {
-  estado = BLOQUEADO;
-  marcoBloqueio = millis();
-  marcoBuzzer = millis();
-  senhaDigitada = "";
-  registrarEvento("bloqueio", "teclado");
-}
-
-// ---------------------------------------------------------------------------
-// DISPLAY OLED - mostra o estado no proprio equipamento
-// ---------------------------------------------------------------------------
-void atualizarDisplay() {
-  display.clearDisplay();
-  display.setTextColor(SSD1306_WHITE);
-
-  display.setTextSize(1);
-  display.setCursor(0, 0);
-  display.println(AP_SSID);
-  display.drawLine(0, 10, 127, 10, SSD1306_WHITE);
-
-  display.setTextSize(2);
-  display.setCursor(0, 18);
-
-  switch (estado) {
-    case TRANCADO:
-      display.println("TRANCADO");
-      display.setTextSize(1);
-      display.setCursor(0, 42);
-      display.println("Digite a senha");
-      break;
-
-    case DIGITANDO: {
-      String mascara = "";
-      for (unsigned int i = 0; i < senhaDigitada.length(); i++) mascara += "*";
-      display.println(mascara);
-      display.setTextSize(1);
-      display.setCursor(0, 42);
-      display.print("# confirma  * apaga");
-      break;
-    }
-
-    case ABERTO:
-      display.println("ABERTO");
-      display.setTextSize(1);
-      display.setCursor(0, 42);
-      display.print("Fecha em ");
-      display.print((TEMPO_ABERTO - (millis() - marcoAbertura)) / 1000);
-      display.println("s");
-      break;
-
-    case BLOQUEADO:
-      display.println("BLOQUEADO");
-      display.setTextSize(1);
-      display.setCursor(0, 42);
-      display.print("Aguarde ");
-      display.print((TEMPO_BLOQUEIO - (millis() - marcoBloqueio)) / 1000);
-      display.println("s");
-      break;
-  }
-
-  display.setCursor(0, 56);
-  display.print("Erros: ");
-  display.print(tentativasErradas);
-  display.print("/");
-  display.print(MAX_TENTATIVAS);
-  display.display();
-}
-
-// ---------------------------------------------------------------------------
-// LEITURA DO TECLADO (nao bloqueante)
-// ---------------------------------------------------------------------------
-void lerTeclado() {
-  char tecla = teclado.getKey();
-  if (!tecla) return;
-
-  // Durante o bloqueio o teclado fica inerte de proposito
-  if (estado == BLOQUEADO) return;
-
-  if (estado == ABERTO) {
-    if (tecla == '#') trancar("teclado");
-    return;
-  }
-
-  if (tecla == '*') {                    // apaga o que foi digitado
-    senhaDigitada = "";
-    estado = TRANCADO;
-    return;
-  }
-
-  if (tecla == '#') {                    // confirma a senha
-    if (senhaDigitada == senhaCorreta) {
-      destrancar("teclado");
-    } else {
-      tentativasErradas++;
-      registrarEvento("erro", "teclado");
-      senhaDigitada = "";
-      estado = TRANCADO;
-      if (tentativasErradas >= MAX_TENTATIVAS) entrarEmBloqueio();
-    }
-    return;
-  }
-
-  if (tecla >= '0' && tecla <= '9' && senhaDigitada.length() < 8) {
-    senhaDigitada += tecla;
-    estado = DIGITANDO;
+void errar(String origem) {
+  erros++;
+  registrar("Acesso negado (" + origem + ") " + String(erros) + "/" + String(MAX_ERROS));
+  if (erros >= MAX_ERROS) {
+    estado = BLOQUEADO;
+    tBloqueio = millis();
+    servo.write(ANG_FECHADO);
+    digitalWrite(PINO_LED, LOW);
+    registrar("BLOQUEADO");
   }
 }
 
-// ---------------------------------------------------------------------------
-// ROTAS HTTP
-// ---------------------------------------------------------------------------
+void desbloquear(String origem) {
+  estado = FECHADO;
+  erros = 0;
+  registrar("DESBLOQUEADO (" + origem + ")");
+}
+
 String nomeEstado() {
-  switch (estado) {
-    case TRANCADO:  return "trancado";
-    case DIGITANDO: return "digitando";
-    case ABERTO:    return "aberto";
-    case BLOQUEADO: return "bloqueado";
+  if (estado == ABERTO) return "ABERTO";
+  if (estado == BLOQUEADO) return "BLOQUEADO";
+  return "FECHADO";
+}
+
+bool uidAutorizado(String uid) {
+  for (int i = 0; i < N_UIDS; i++) {
+    if (uid == String(UIDS_AUTORIZADOS[i])) return true;
   }
-  return "desconhecido";
+  return false;
 }
 
-void enviarJson(int codigo, String corpo) {
-  server.sendHeader("Access-Control-Allow-Origin", "*");
-  server.send(codigo, "application/json", corpo);
-}
+void lerRFID() {
+  if (!rfid.PICC_IsNewCardPresent() || !rfid.PICC_ReadCardSerial()) return;
 
-void rotaStatus() {
-  String json = "{";
-  json += "\"estado\":\"" + nomeEstado() + "\",";
-  json += "\"tentativas\":" + String(tentativasErradas) + ",";
-  json += "\"maxTentativas\":" + String(MAX_TENTATIVAS) + ",";
-  json += "\"digitos\":" + String(senhaDigitada.length()) + ",";
-  json += "\"uptime\":" + String(millis() / 1000);
-  json += "}";
-  enviarJson(200, json);
-}
-
-void rotaLog() {
-  String json = "[";
-  for (int i = 0; i < logTotal; i++) {
-    int pos = (logInicio + i) % TAM_LOG;
-    if (i > 0) json += ",";
-    json += "{\"t\":" + String(log[pos].tempo / 1000) + ",";
-    json += "\"tipo\":\"" + log[pos].tipo + "\",";
-    json += "\"origem\":\"" + log[pos].origem + "\"}";
+  String uid = "";
+  for (byte i = 0; i < rfid.uid.size; i++) {
+    String h = String(rfid.uid.uidByte[i], HEX);
+    h.toUpperCase();
+    if (h.length() < 2) h = "0" + h;
+    if (i > 0) uid += " ";
+    uid += h;
   }
-  json += "]";
-  enviarJson(200, json);
-}
-
-void rotaTrava() {
-  if (!server.hasArg("estado")) {
-    enviarJson(400, "{\"erro\":\"parametro estado ausente\"}");
-    return;
-  }
-  String acao = server.arg("estado");
+  Serial.println("UID lido: " + uid);
+  rfid.PICC_HaltA();
+  rfid.PCD_StopCrypto1();
 
   if (estado == BLOQUEADO) {
-    enviarJson(423, "{\"erro\":\"cofre bloqueado por tentativas invalidas\"}");
+    mostrarTemp("BLOQUEADO", "Cartao ignorado");
     return;
   }
-
-  if (acao == "abrir") {
-    destrancar("rede");
-    enviarJson(200, "{\"estado\":\"aberto\"}");
-  } else if (acao == "fechar") {
-    trancar("rede");
-    enviarJson(200, "{\"estado\":\"trancado\"}");
+  if (uidAutorizado(uid)) {
+    abrir("cartao");
   } else {
-    enviarJson(400, "{\"erro\":\"valor invalido: use abrir ou fechar\"}");
+    mostrarTemp("Cartao negado", uid);
+    errar("cartao");
   }
+  desenharLCD();
 }
 
-void rotaSenha() {
-  if (!server.hasArg("nova")) {
-    enviarJson(400, "{\"erro\":\"parametro nova ausente\"}");
-    return;
-  }
-  String nova = server.arg("nova");
-  if (nova.length() < 4 || nova.length() > 8) {
-    enviarJson(400, "{\"erro\":\"a senha deve ter de 4 a 8 digitos\"}");
-    return;
-  }
-  for (unsigned int i = 0; i < nova.length(); i++) {
-    if (nova[i] < '0' || nova[i] > '9') {
-      enviarJson(400, "{\"erro\":\"use apenas digitos\"}");
-      return;
-    }
-  }
-  senhaCorreta = nova;
-  registrarEvento("troca-senha", "rede");
-  enviarJson(200, "{\"ok\":true}");
-}
-
-void rotaNaoEncontrada() {
-  enviarJson(404, "{\"erro\":\"rota inexistente\"}");
-}
-
-// Pagina cliente servida pelo proprio ESP32 (armazenada na flash via PROGMEM)
-const char PAGINA[] PROGMEM = R"HTML(<!DOCTYPE html>
-<html lang="pt-BR"><head><meta charset="utf-8">
+const char PAGINA[] PROGMEM = R"rawliteral(
+<!DOCTYPE html><html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Cofre inteligente</title><style>
-*{box-sizing:border-box;margin:0}
-body{background:#14161a;color:#e6e4dd;font-family:system-ui,sans-serif;padding:20px;max-width:520px;margin:0 auto}
-h1{font-size:15px;font-weight:500;letter-spacing:.12em;text-transform:uppercase;color:#8a8880;margin-bottom:18px}
-.painel{border:1px solid #2c2f36;border-radius:10px;padding:22px;margin-bottom:14px}
-.estado{font-family:ui-monospace,monospace;font-size:34px;letter-spacing:.06em}
-.aberto{color:#63c98a}.trancado{color:#e0a44a}.bloqueado{color:#e05a5a}.digitando{color:#5a9fe0}
-.meta{color:#8a8880;font-size:13px;margin-top:8px}
-.botoes{display:flex;gap:10px;margin-bottom:14px}
-button{flex:1;padding:14px;border:1px solid #2c2f36;border-radius:8px;background:#1c1f25;
-color:#e6e4dd;font-size:15px;cursor:pointer}
-button:hover{border-color:#4a4e57}button:disabled{opacity:.35;cursor:not-allowed}
-h2{font-size:12px;font-weight:500;letter-spacing:.1em;text-transform:uppercase;color:#8a8880;margin-bottom:10px}
-li{list-style:none;font-family:ui-monospace,monospace;font-size:13px;padding:6px 0;
-border-bottom:1px solid #22252b;display:flex;justify-content:space-between;color:#b8b6ae}
-.vazio{color:#5c5a55;font-size:13px}
-#conexao{font-size:12px;color:#8a8880;margin-top:14px}
+<title>Vault32</title>
+<style>
+body{font-family:sans-serif;max-width:420px;margin:20px auto;padding:0 12px;text-align:center}
+#st{font-size:2em;font-weight:bold;padding:14px;border-radius:10px;color:#fff;background:#888}
+input,button{font-size:1.1em;padding:10px;margin:6px;width:90%}
 </style></head><body>
-<h1>Cofre inteligente</h1>
-<div class="painel">
-  <div id="estado" class="estado">--</div>
-  <div class="meta" id="meta">conectando...</div>
-</div>
-<div class="botoes">
-  <button id="btnAbrir">Abrir</button>
-  <button id="btnFechar">Fechar</button>
-</div>
-<div class="painel">
-  <h2>Registro de eventos</h2>
-  <ul id="log"><li class="vazio">Nenhum evento ainda.</li></ul>
-</div>
-<div id="conexao">Aguardando o servidor</div>
+<h2>Vault32</h2>
+<div id="st">...</div>
+<p id="inf"></p>
+<input id="s" type="password" placeholder="Senha">
+<button onclick="acao('abrir')">Abrir</button>
+<button onclick="acao('desbloquear')">Desbloquear (senha admin)</button>
+<p id="msg"></p>
 <script>
-const $=id=>document.getElementById(id);
-let falhas=0;
-async function atualizar(){
-  try{
-    const s=await(await fetch('/status')).json();
-    $('estado').textContent=s.estado.toUpperCase();
-    $('estado').className='estado '+s.estado;
-    $('meta').textContent='Erros: '+s.tentativas+'/'+s.maxTentativas+
-      '  |  Digitos: '+s.digitos+'  |  Ativo ha '+s.uptime+'s';
-    $('btnAbrir').disabled=(s.estado==='aberto'||s.estado==='bloqueado');
-    $('btnFechar').disabled=(s.estado!=='aberto');
-    const ev=await(await fetch('/log')).json();
-    $('log').innerHTML=ev.length?ev.slice().reverse().map(e=>
-      '<li><span>'+e.tipo+'</span><span>'+e.origem+' &middot; '+e.t+'s</span></li>').join('')
-      :'<li class="vazio">Nenhum evento ainda.</li>';
-    falhas=0;$('conexao').textContent='Conectado ao ESP32';
-  }catch(e){
-    falhas++;
-    $('conexao').textContent='Sem resposta do ESP32 ('+falhas+' tentativas). Verifique a rede CofreESP32.';
-  }
+function acao(a){
+  fetch('/'+a+'?s='+encodeURIComponent(document.getElementById('s').value))
+   .then(r=>r.text()).then(t=>{document.getElementById('msg').innerText=t;atualiza();});
 }
-async function comando(acao){
-  try{await fetch('/trava?estado='+acao,{method:'POST'});atualizar();}
-  catch(e){$('conexao').textContent='Falha ao enviar o comando. Tente novamente.';}
+function atualiza(){
+  fetch('/estado').then(r=>r.json()).then(d=>{
+    var e=document.getElementById('st');
+    e.innerText=d.estado;
+    e.style.background=d.estado=='ABERTO'?'#2a9d3a':(d.estado=='BLOQUEADO'?'#c0392b':'#555');
+    document.getElementById('inf').innerText='Erros: '+d.erros+'/'+d.max+(d.restante>0?' | '+d.restante+'s restantes':'');
+  }).catch(()=>{});
 }
-$('btnAbrir').onclick=()=>comando('abrir');
-$('btnFechar').onclick=()=>comando('fechar');
-atualizar();setInterval(atualizar,1000);
-</script></body></html>)HTML";
+setInterval(atualiza,1000);atualiza();
+</script></body></html>
+)rawliteral";
 
-void rotaRaiz() {
-  server.send_P(200, "text/html", PAGINA);
+void hEstado() {
+  long restante = 0;
+  if (estado == ABERTO) restante = (TEMPO_ABERTO - (millis() - tAberto)) / 1000 + 1;
+  if (estado == BLOQUEADO) restante = (TEMPO_BLOQUEIO - (millis() - tBloqueio)) / 1000 + 1;
+  String j = "{\"estado\":\"" + nomeEstado() + "\",\"erros\":" + String(erros) +
+             ",\"max\":" + String(MAX_ERROS) + ",\"restante\":" + String(restante) + "}";
+  server.send(200, "application/json", j);
 }
 
-// ---------------------------------------------------------------------------
-// SETUP
-// ---------------------------------------------------------------------------
+void hAbrir() {
+  if (estado == BLOQUEADO) { server.send(200, "text/plain", "Sistema bloqueado."); return; }
+  if (server.arg("s") == SENHA) { abrir("web"); server.send(200, "text/plain", "Aberto!"); }
+  else { errar("web"); server.send(200, "text/plain", "Senha errada."); }
+}
+
+void hDesbloquear() {
+  if (server.arg("s") == SENHA_ADMIN) { desbloquear("web"); server.send(200, "text/plain", "Desbloqueado."); }
+  else server.send(200, "text/plain", "Senha admin errada.");
+}
+
 void setup() {
   Serial.begin(115200);
+  pinMode(PINO_LED, OUTPUT);
 
-  pinMode(PINO_BUZZER, OUTPUT);
-  pinMode(PINO_LED_VERDE, OUTPUT);
-  pinMode(PINO_LED_VERM, OUTPUT);
+  servo.setPeriodHertz(50);
+  servo.attach(PINO_SERVO, 500, 2400);
+  servo.write(ANG_FECHADO);
 
-  servoTrava.attach(PINO_SERVO);
-  servoTrava.write(ANGULO_TRANCADO);
-  digitalWrite(PINO_LED_VERM, HIGH);
+  teclado.begin();
 
-  if (!display.begin(SSD1306_SWITCHCAPVCC, OLED_ENDERECO)) {
-    Serial.println("Falha ao iniciar o display OLED. Confira SDA/SCL e o endereco I2C.");
-  }
-  display.clearDisplay();
-  display.display();
+  // LCD direto sem ponteiro
+  Wire.begin(PINO_SDA, PINO_SCL);
+  lcd.init();
+  lcd.backlight();
 
-  // ESP32 como ponto de acesso: nao depende de roteador externo
-  WiFi.softAP(AP_SSID, AP_SENHA);
-  Serial.print("Rede criada: ");
-  Serial.println(AP_SSID);
-  Serial.print("Acesse em http://");
-  Serial.println(WiFi.softAPIP());     // 192.168.4.1
+  // RFID direto
+  SPI.begin(RFID_SCK, RFID_MISO, RFID_MOSI, RFID_SS);
+  rfid.PCD_Init();
 
-  server.on("/",       HTTP_GET,  rotaRaiz);
-  server.on("/status", HTTP_GET,  rotaStatus);
-  server.on("/log",    HTTP_GET,  rotaLog);
-  server.on("/trava",  HTTP_POST, rotaTrava);
-  server.on("/senha",  HTTP_POST, rotaSenha);
-  server.onNotFound(rotaNaoEncontrada);
+  // Wi-Fi SoftAP e rotas
+  WiFi.softAP(WIFI_SSID, WIFI_PASS);
+  server.on("/", []() { server.send_P(200, "text/html", PAGINA); });
+  server.on("/estado", hEstado);
+  server.on("/abrir", hAbrir);
+  server.on("/desbloquear", hDesbloquear);
   server.begin();
 
-  registrarEvento("inicializacao", "sistema");
+  registrar("Sistema iniciado");
+  desenharLCD();
 }
 
-// ---------------------------------------------------------------------------
-// LOOP PRINCIPAL
-// Sem delay(): qualquer pausa bloquearia handleClient() e derrubaria o servidor.
-// Toda temporizacao e feita comparando millis() com os marcos salvos.
-// ---------------------------------------------------------------------------
 void loop() {
-  server.handleClient();      // atende requisicoes HTTP
-  lerTeclado();               // le a entrada fisica
+  server.handleClient();
 
-  unsigned long agora = millis();
-
-  // Fecha sozinho depois do tempo de abertura
-  if (estado == ABERTO && agora - marcoAbertura >= TEMPO_ABERTO) {
-    trancar("automatico");
+  teclado.tick();
+  while (teclado.available()) {
+    keypadEvent e = teclado.read();
+    if (e.bit.EVENT != KEY_JUST_PRESSED) continue;
+    char k = (char)e.bit.KEY;
+    if (estado == BLOQUEADO) continue;
+    if (k == '*') digitado = "";
+    else if (k == '#') {
+      if (digitado == SENHA) abrir("teclado");
+      else errar("teclado");
+      digitado = "";
+    } else if (digitado.length() < 8) digitado += k;
+    desenharLCD();
   }
 
-  // Sai do bloqueio quando o tempo expira
-  if (estado == BLOQUEADO) {
-    if (agora - marcoBloqueio >= TEMPO_BLOQUEIO) {
-      tentativasErradas = 0;
-      estado = TRANCADO;
-      digitalWrite(PINO_BUZZER, LOW);
-      buzzerLigado = false;
-    } else if (agora - marcoBuzzer >= 500) {
-      // buzzer intermitente sem travar o loop
-      buzzerLigado = !buzzerLigado;
-      digitalWrite(PINO_BUZZER, buzzerLigado ? HIGH : LOW);
-      marcoBuzzer = agora;
-    }
-  }
+  lerRFID();
 
-  // Redesenha o OLED a cada 200 ms para nao saturar o barramento I2C
-  static unsigned long marcoDisplay = 0;
-  if (agora - marcoDisplay >= 200) {
-    atualizarDisplay();
-    marcoDisplay = agora;
+  if (estado == ABERTO && millis() - tAberto >= TEMPO_ABERTO) fechar();
+  if (estado == BLOQUEADO && millis() - tBloqueio >= TEMPO_BLOQUEIO) desbloquear("tempo");
+
+  static unsigned long tLcd = 0;
+  if (millis() - tLcd > 300) {
+    tLcd = millis();
+    desenharLCD();
   }
+  delay(5);
 }
