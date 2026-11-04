@@ -68,7 +68,7 @@ Após conectar um dispositivo à rede criada pelo ESP32, a interface pode ser ac
 
 ## Interface web e rotas HTTP
 
-A aplicação web permite consultar o estado do sistema e enviar comandos de controle.
+A aplicação web permite consultar o estado do sistema e enviar comandos de controle. Sua estrutura HTML, CSS e JavaScript é disponibilizada pelo próprio firmware do ESP32.
 
 | Rota | Método | Descrição |
 |---|---|---|
@@ -101,6 +101,8 @@ O firmware utiliza a comunicação serial para apresentar informações e evento
 
 A interface web disponibiliza a consulta do estado atual, quantidade de tentativas inválidas e tempo restante de bloqueio, quando aplicável.
 
+Os eventos não possuem armazenamento persistente nem histórico disponível pela interface web.
+
 ## Tecnologias e bibliotecas
 
 - C++
@@ -110,7 +112,7 @@ A interface web disponibiliza a consulta do estado atual, quantidade de tentativ
 - HTTP
 - WebServer
 - ESP32Servo
-- Adafruit Keypad
+- Keypad
 - LiquidCrystal_I2C
 - MFRC522
 - SPI
@@ -141,8 +143,10 @@ cofre-inteligente-esp32/
 
 ## Limitações e melhorias futuras
 
-- Implementar armazenamento persistente de eventos.
-- Melhorar a segurança da autenticação e da comunicação HTTP.
+- A comunicação HTTP não utiliza criptografia e está restrita à rede local criada pelo ESP32.
+- O sistema não possui armazenamento persistente de eventos.
+- A implementação atual não possui sensor ambiental.
+- Aprimorar a segurança da autenticação e da comunicação.
 - Implementar registro de eventos acessível pela interface web.
 - Adicionar mecanismos de monitoramento e notificações remotas.
 - Aprimorar a interface e a experiência de utilização.
