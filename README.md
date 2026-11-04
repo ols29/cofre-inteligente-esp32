@@ -1,244 +1,159 @@
-# Cofre Inteligente: Sistema Ciberfísico com ESP32
+# Vault32 — Sistema Inteligente de Controle de Acesso com ESP32
 
-Trava eletrônica com dois caminhos de autenticação independentes (teclado físico e rede local) e registro de eventos consultável remotamente.
+O **Vault32** é um protótipo de sistema ciberfísico para controle de acesso físico, desenvolvido com ESP32. O projeto combina autenticação local por senha ou cartão RFID, acionamento eletrônico de uma trava e monitoramento por meio de uma interface web na rede local.
 
-**Disciplina:** Conectividade em Sistemas Ciberfísicos
-**Curso:** Engenharia de Software, PUCPR
+**Disciplina:** Conectividade em Sistemas Ciberfísicos  
+**Curso:** Engenharia de Software — PUCPR
 
 ## Problema
 
-Armários, cofres e salas técnicas trancados por chave física não deixam rastro. Não há registro de quem abriu, em que horário, nem quantas tentativas malsucedidas ocorreram antes. Também não existe forma de liberar o acesso a distância quando alguém precisa entrar e o responsável pela chave não está no local.
+Cofres, armários e salas técnicas protegidos exclusivamente por chaves físicas apresentam limitações de segurança e monitoramento. Normalmente, não oferecem registro de tentativas de acesso, identificação dos meios de autenticação utilizados ou possibilidade de controle remoto.
 
-Este projeto demonstra, em escala de protótipo, uma trava eletrônica que resolve os três pontos: autentica por senha local, aceita comando remoto pela rede e mantém um registro dos eventos.
+O Vault32 propõe uma alternativa baseada em sistemas embarcados, permitindo autenticação eletrônica, acionamento automatizado e consulta de informações pela rede local.
 
-## Arquitetura da solução
+## Solução proposta
 
-```
-        +-----------------------------------+
-        |        APLICAÇÃO CLIENTE          |
-        |   Navegador (celular ou notebook) |
-        +-----------------+-----------------+
-                          |
-              Requisições | Respostas
-               / Comandos | JSON
-                          v
-+-------------------------+-----------------------------+
-|                    ESP32 (SERVIDOR)                   |
-|          Servidor HTTP escutando na porta 80          |
-|                                                       |
-|     Leitura |                        | Acionamento    |
-|             v                        v                |
-|   +--------------------+   +-------------------------+|
-|   | Teclado 4x4        |   | Servo SG90 (trava)      ||
-|   | (entrada de senha) |   | Buzzer, LEDs, OLED      ||
-|   +--------------------+   +-------------------------+|
-+-------------------------------------------------------+
+O sistema utiliza um ESP32 como unidade central de processamento e controle. O acesso pode ser solicitado por dois meios locais:
+
+- **Teclado de membrana:** permite inserir uma senha numérica. A tecla `#` confirma a senha e `*` apaga os caracteres digitados.
+- **Leitor RFID RC522:** realiza a leitura do cartão ou tag e permite verificar se sua identificação está autorizada.
+
+Quando a autenticação é aceita, o servo motor SG90 realiza o movimento de abertura da trava e o LED indica a liberação do acesso. O sistema também prevê o fechamento automático após 10 segundos.
+
+Após três tentativas consecutivas inválidas, o acesso é bloqueado temporariamente por 30 segundos.
+
+## Arquitetura do sistema
+
+O ESP32 centraliza o processamento das entradas, a lógica de autenticação, o controle dos atuadores e a comunicação com a interface web.
+
+```text
+              APLICAÇÃO CLIENTE
+          Navegador em celular ou PC
+                      |
+                      | Wi-Fi / HTTP
+                      |
+                      v
+          +-----------------------+
+          |         ESP32         |
+          |                       |
+          |  Processamento central|
+          |  Autenticação         |
+          |  Servidor web         |
+          +-----------------------+
+              |             |
+       ENTRADAS          SAÍDAS
+              |             |
+        +-----------+   +-----------+
+        | Teclado   |   | Servo SG90|
+        | RFID RC522|   | LED       |
+        +-----------+   +-----------+
+              |
+         LCD 16x2
+      Exibição de estados
 ```
 
 ## Hardware utilizado
 
-| Componente | Função | Preço aprox. |
-|---|---|---|
-| ESP32 NodeMCU (WROOM-32) | Servidor e controle | R$ 45 |
-| Teclado matricial 4x4 | Entrada de senha local | R$ 15 |
-| Display OLED 0.96" I2C (SSD1306) | Estado no equipamento | R$ 30 |
-| Servo motor SG90 | Trava mecânica | R$ 15 |
-| Buzzer ativo 5V | Alerta de bloqueio | R$ 4 |
-| LED verde + LED vermelho + 2 resistores 220Ω | Indicação visual | R$ 3 |
-| Protoboard 400 pontos + jumpers | Montagem | R$ 30 |
-| **Total** | | **~R$ 142** |
-
-### Diagrama de conexões (pinagem)
-
-| Componente | Pino do ESP32 | Observação |
-|---|---|---|
-| Teclado, linhas R1 a R4 | GPIO 13, 12, 14, 27 | |
-| Teclado, colunas C1 a C4 | GPIO 26, 25, 33, 32 | |
-| OLED, SDA | GPIO 21 | I2C, endereço `0x3C` |
-| OLED, SCL | GPIO 22 | |
-| OLED, VCC / GND | 3V3 / GND | |
-| Servo, sinal (laranja) | GPIO 4 | |
-| Servo, VCC / GND | 5V / GND | GND comum com o ESP32 |
-| Buzzer (+) | GPIO 15 | |
-| LED verde | GPIO 2 | Resistor 220Ω em série |
-| LED vermelho | GPIO 5 | Resistor 220Ω em série |
-
-**Cuidados de montagem:**
-
-- Os GPIO 6 a 11 são usados pela memória flash interna e não podem ser utilizados.
-- O servo SG90 provoca um pico de corrente ao iniciar o movimento. Se o ESP32 reiniciar sozinho durante o acionamento, alimente o servo por fonte externa de 5V mantendo o **GND comum** com a placa.
-- Se o display não inicializar, confirme o endereço I2C com um sketch de varredura, pois alguns módulos usam `0x3D`.
-
-## Documentação da API
-
-Todas as respostas são JSON. O cabeçalho `Access-Control-Allow-Origin: *` está habilitado para permitir testes com o cliente rodando fora da placa.
-
-### `GET /`
-
-Serve a página de controle embarcada na flash do ESP32.
-
-### `GET /status`
-
-Retorna o estado atual do sistema.
-
-```json
-{
-  "estado": "trancado",
-  "tentativas": 1,
-  "maxTentativas": 3,
-  "digitos": 0,
-  "uptime": 482
-}
-```
-
-O campo `estado` assume os valores `trancado`, `digitando`, `aberto` ou `bloqueado`.
-
-### `GET /log`
-
-Retorna os últimos 20 eventos, do mais antigo para o mais recente.
-
-```json
-[
-  { "t": 12,  "tipo": "inicializacao", "origem": "sistema" },
-  { "t": 45,  "tipo": "erro",          "origem": "teclado" },
-  { "t": 51,  "tipo": "abertura",      "origem": "rede"    }
-]
-```
-
-### `POST /trava?estado=abrir` · `POST /trava?estado=fechar`
-
-Aciona o servo. Retorna `423 Locked` se o cofre estiver em estado de bloqueio.
-
-```json
-{ "estado": "aberto" }
-```
-
-### `POST /senha?nova=4321`
-
-Troca a senha do teclado. Aceita de 4 a 8 dígitos numéricos.
-
-```json
-{ "ok": true }
-```
-
-### Códigos de erro
-
-| Código | Situação |
+| Componente | Função |
 |---|---|
-| `400` | Parâmetro ausente ou valor inválido |
-| `404` | Rota inexistente |
-| `423` | Cofre bloqueado por tentativas inválidas |
+| ESP32 DevKit (30 pinos) | Processamento, conectividade e controle |
+| Teclado de membrana | Entrada de senha |
+| RFID RC522 | Leitura de cartões e tags |
+| LCD 16x2 I2C | Exibição de mensagens e estados |
+| Servo motor SG90 | Acionamento da trava |
+| LED | Indicação visual do estado de acesso |
+| Placa de expansão, protoboard e jumpers | Montagem e conexões |
 
-## Máquina de estados
+**Controlador:** ESP32  
+**Linguagem:** C++  
+**Ambiente de desenvolvimento:** Arduino IDE
 
-```
-                  senha correta
-   TRANCADO ---------------------------> ABERTO
-      ^  |                                 |
-      |  | dígito                          | 10 s ou comando "fechar"
-      |  v                                 |
-      | DIGITANDO                          |
-      |    |                               |
-      |    | senha errada (3x)             |
-      |    v                               |
-      +-- BLOQUEADO <----------------------+
-             (30 s, buzzer intermitente)
-```
+*Os detalhes de pinagem e alimentação devem ser consultados no esquema elétrico atualizado do protótipo.*
 
-Três senhas incorretas consecutivas levam ao estado `BLOQUEADO`, no qual o teclado fica inerte e o buzzer apita em intervalos de 500 ms. O bloqueio também recusa comandos vindos da rede.
+## Funcionamento e autenticação
 
-## Instruções de instalação e execução
+O sistema utiliza uma lógica central de controle para processar as solicitações de acesso.
 
-### 1. Firmware do ESP32
+### Autenticação por senha
 
-Instale a Arduino IDE e adicione o suporte ao ESP32 em **Arquivo → Preferências → URLs adicionais para gerenciadores de placas**:
+1. O usuário digita a senha no teclado.
+2. Confirma a entrada utilizando `#`.
+3. O ESP32 verifica a senha informada.
+4. Se estiver correta, o acesso é liberado.
+5. Se estiver incorreta, uma tentativa inválida é contabilizada.
 
-```
-https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
-```
+### Autenticação por RFID
 
-Depois instale, pelo Gerenciador de Bibliotecas:
+1. O usuário aproxima o cartão ou tag do leitor RC522.
+2. O ESP32 realiza a leitura da identificação.
+3. A identificação é comparada com os cartões autorizados.
+4. O acesso é liberado ou negado conforme a validação.
 
-- `Keypad` (Mark Stanley / Alexander Brevig)
-- `ESP32Servo` (Kevin Harrington)
-- `Adafruit SSD1306`
-- `Adafruit GFX Library`
+### Controle de acesso e bloqueio
 
-Selecione a placa **ESP32 Dev Module**, abra `src/esp32/esp32_server/esp32_server.ino` e envie para a placa.
+- Três tentativas inválidas consecutivas provocam bloqueio temporário.
+- O bloqueio tem duração de 30 segundos.
+- Durante a liberação, o servo realiza a abertura da trava.
+- O fechamento automático ocorre após 10 segundos.
 
-### 2. Acesso ao sistema
+O LCD apresenta mensagens para orientar o usuário e informar o estado do equipamento.
 
-1. Conecte o celular ou notebook à rede Wi-Fi `CofreESP32` (senha `pucpr2026`).
-2. Abra `http://192.168.4.1` no navegador.
+## Conectividade e interface web
 
-### 3. Cliente de desenvolvimento (opcional)
+O ESP32 opera como um ponto de acesso Wi-Fi próprio (**Access Point**), identificado pela rede `Vault32`.
 
-A pasta `src/client/` contém a mesma interface como arquivos separados, útil para editar o layout sem recompilar o firmware. Abra `index.html` no navegador com o computador conectado à rede do cofre.
+Essa configuração permite que celulares e computadores se conectem diretamente ao equipamento, sem depender de um roteador externo.
 
-### 4. Testes por linha de comando
+A interface web permite acompanhar o estado do sistema e interagir com as funcionalidades de controle disponíveis no firmware.
 
-```bash
-curl http://192.168.4.1/status
-curl http://192.168.4.1/log
-curl -X POST "http://192.168.4.1/trava?estado=abrir"
-curl -X POST "http://192.168.4.1/trava?estado=fechar"
-curl -X POST "http://192.168.4.1/senha?nova=4321"
-```
+Entre as funcionalidades previstas para a aplicação estão:
 
-## Uso do teclado
+- Consulta do estado atual do cofre.
+- Solicitação de abertura pela rede.
+- Consulta do histórico de eventos.
+- Controle administrativo do sistema.
 
-| Tecla | Ação |
+**Endereço de acesso:** `http://192.168.4.1`
+
+*As rotas HTTP, os parâmetros e os formatos de resposta serão documentados conforme a implementação efetivamente presente no firmware.*
+
+## Tecnologias utilizadas
+
+| Tecnologia | Aplicação |
 |---|---|
-| `0` a `9` | Digita a senha (máximo 8 dígitos) |
-| `#` | Confirma a senha, ou tranca o cofre quando aberto |
-| `*` | Apaga o que foi digitado |
-
-Senha padrão de fábrica: `1234`.
-
-## Decisões de projeto
-
-**Por que HTTP e não TCP ou UDP.** A interação é de requisição e resposta, sem fluxo contínuo: o cliente pergunta o estado, o servidor responde. HTTP entrega isso sem nenhuma camada extra, permite testar cada rota com `curl` e dispensa aplicativo próprio: qualquer navegador serve de cliente. TCP faria sentido se houvesse necessidade de conexão persistente com notificação do servidor para o cliente; UDP, se houvesse telemetria contínua em que perder um pacote fosse tolerável.
-
-**Por que Access Point e não Station.** Em modo AP o sistema funciona em qualquer lugar, sem depender de credenciais de rede de terceiros nem de um roteador disponível. Isso também reproduz o cenário real de uma trava instalada em local sem infraestrutura de rede.
-
-**Ausência de `delay()` no loop.** Qualquer pausa bloqueante impediria `server.handleClient()` de rodar, e o cliente veria a página travar. Toda a temporização (bloqueio de 30 s, fechamento automático de 10 s, intermitência do buzzer, atualização do OLED) é feita comparando `millis()` com marcos salvos.
-
-**Atualização do display a cada 200 ms.** Redesenhar o OLED a cada volta do loop saturaria o barramento I2C e reduziria a responsividade do servidor sem ganho perceptível.
+| C++ | Programação do ESP32 |
+| Arduino IDE | Desenvolvimento e gravação do firmware |
+| Wi-Fi | Comunicação entre ESP32 e cliente |
+| HTTP | Comunicação entre navegador e servidor embarcado |
+| I2C | Comunicação com o LCD |
+| SPI | Comunicação com o leitor RFID RC522 |
 
 ## Limitações conhecidas
 
-- **O registro de eventos vive na RAM.** Os 20 eventos do buffer circular se perdem ao desligar a placa. Persistência exigiria SPIFFS, EEPROM ou cartão SD.
-- **A senha também é volátil.** Ao reiniciar, volta ao padrão `1234`.
-- **Sem criptografia.** O tráfego é HTTP puro, e a senha da rota `/senha` transita na query string. Um sistema em produção exigiria HTTPS e autenticação por token.
-- **A trava é simbólica.** O servo SG90 não tem torque para uma fechadura real; ele demonstra o acionamento, não a resistência mecânica.
+O Vault32 é um protótipo acadêmico, não um dispositivo de segurança pronto para uso comercial.
 
-Essas limitações são conscientes e delimitadas pelo escopo da disciplina.
+Entre os pontos que precisam ser considerados estão:
 
-## Vídeo demonstrativo
+- A resistência mecânica do servo SG90 é limitada.
+- A proteção da comunicação HTTP precisa ser aprimorada para aplicações reais.
+- A persistência dos registros e das credenciais depende da implementação de armazenamento não volátil.
+- O controle de usuários e permissões pode ser expandido.
+- A interface e os mecanismos de autenticação podem receber melhorias adicionais.
 
-*(inserir link do vídeo mostrando: digitação da senha no teclado, abertura pelo navegador, bloqueio após três erros e fechamento automático)*
+## Melhorias futuras
 
-## Estrutura do repositório
+- Aprimoramento da interface web.
+- Organização e expansão do histórico de eventos.
+- Integração com Telegram para notificações.
+- Melhorias nos mecanismos de autenticação e segurança.
+- Gerenciamento de usuários e permissões.
 
-```
-cofre-inteligente-esp32/
-├── docs/
-│   ├── arquitetura.svg
-│   ├── proposta-etapa1.md
-│   └── checklist-etapa1.md
-├── src/
-│   ├── esp32/
-│   │   ├── esp32_server/
-│   │   │   └── esp32_server.ino
-│   │   └── etapa1_prova_conceito/
-│   │       └── etapa1_prova_conceito.ino
-│   └── client/
-│       ├── index.html
-│       └── app.js
-├── README.md
-└── .gitignore
-```
+## Repositório
+
+Código-fonte, documentação e histórico de desenvolvimento:
+
+[GitHub — cofre-inteligente-esp32](https://github.com/ols29/cofre-inteligente-esp32)
 
 ## Uso de inteligência artificial
 
-Conforme a seção 9 do regulamento da disciplina, a equipe registra que utilizou ferramentas de IA generativa como apoio na estruturação da documentação e no esclarecimento de dúvidas conceituais. Todo o código foi revisado, testado no hardware físico e é compreendido integralmente pelos integrantes, que se responsabilizam por ele na defesa técnica.
+Ferramentas de inteligência artificial generativa foram utilizadas como apoio à organização da documentação e ao esclarecimento de dúvidas conceituais. A equipe é responsável pela revisão, compreensão e validação das funcionalidades e do código apresentados no projeto.
