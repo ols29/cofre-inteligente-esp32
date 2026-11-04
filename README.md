@@ -123,6 +123,8 @@ cofre-inteligente-esp32/
 │
 ├── docs/
 │   ├── apresentacao-roteiro.md
+│   ├── arquitetura.svg
+│   ├── checklist-etapa1.md
 │   └── proposta-etapa1.md
 │
 ├── src/
