@@ -1,159 +1,110 @@
-# Vault32 — Sistema Inteligente de Controle de Acesso com ESP32
+# Vault32 — Sistema Inteligente de Controle de Acesso
 
-O **Vault32** é um protótipo de sistema ciberfísico para controle de acesso físico, desenvolvido com ESP32. O projeto combina autenticação local por senha ou cartão RFID, acionamento eletrônico de uma trava e monitoramento por meio de uma interface web na rede local.
+Projeto desenvolvido para a disciplina de Conectividade em Sistemas Ciberfísicos, do curso de Engenharia de Software da PUCPR.
 
-**Disciplina:** Conectividade em Sistemas Ciberfísicos  
-**Curso:** Engenharia de Software — PUCPR
+O Vault32 é um sistema de controle de acesso físico baseado no microcontrolador ESP32. O projeto combina autenticação local por senha e identificação RFID com uma interface web para monitoramento e acionamento remoto da trava.
 
-## Problema
+## Equipe
 
-Cofres, armários e salas técnicas protegidos exclusivamente por chaves físicas apresentam limitações de segurança e monitoramento. Normalmente, não oferecem registro de tentativas de acesso, identificação dos meios de autenticação utilizados ou possibilidade de controle remoto.
+- Luiz
+- Gustavo
+- Nicolas
+- Oliver
+- Enzo
 
-O Vault32 propõe uma alternativa baseada em sistemas embarcados, permitindo autenticação eletrônica, acionamento automatizado e consulta de informações pela rede local.
+## Objetivo do projeto
 
-## Solução proposta
+Desenvolver um protótipo de controle de acesso que integre hardware, firmware e comunicação em rede, permitindo autenticação, monitoramento do estado do sistema e acionamento de um mecanismo físico.
 
-O sistema utiliza um ESP32 como unidade central de processamento e controle. O acesso pode ser solicitado por dois meios locais:
+## Funcionalidades
 
-- **Teclado de membrana:** permite inserir uma senha numérica. A tecla `#` confirma a senha e `*` apaga os caracteres digitados.
-- **Leitor RFID RC522:** realiza a leitura do cartão ou tag e permite verificar se sua identificação está autorizada.
+- Autenticação por senha utilizando teclado matricial 3x3.
+- Identificação de cartões ou tags RFID autorizados.
+- Controle de abertura e fechamento por servo motor.
+- Indicação visual do estado por LED.
+- Exibição de informações no display LCD 16x2.
+- Criação de uma rede Wi-Fi própria pelo ESP32.
+- Interface web para consulta do estado e envio de comandos.
+- Bloqueio temporário após três tentativas inválidas.
+- Desbloqueio administrativo.
 
-Quando a autenticação é aceita, o servo motor SG90 realiza o movimento de abertura da trava e o LED indica a liberação do acesso. O sistema também prevê o fechamento automático após 10 segundos.
-
-Após três tentativas consecutivas inválidas, o acesso é bloqueado temporariamente por 30 segundos.
-
-## Arquitetura do sistema
-
-O ESP32 centraliza o processamento das entradas, a lógica de autenticação, o controle dos atuadores e a comunicação com a interface web.
-
-```text
-              APLICAÇÃO CLIENTE
-          Navegador em celular ou PC
-                      |
-                      | Wi-Fi / HTTP
-                      |
-                      v
-          +-----------------------+
-          |         ESP32         |
-          |                       |
-          |  Processamento central|
-          |  Autenticação         |
-          |  Servidor web         |
-          +-----------------------+
-              |             |
-       ENTRADAS          SAÍDAS
-              |             |
-        +-----------+   +-----------+
-        | Teclado   |   | Servo SG90|
-        | RFID RC522|   | LED       |
-        +-----------+   +-----------+
-              |
-         LCD 16x2
-      Exibição de estados
-```
-
-## Hardware utilizado
+## Componentes utilizados
 
 | Componente | Função |
 |---|---|
-| ESP32 DevKit (30 pinos) | Processamento, conectividade e controle |
-| Teclado de membrana | Entrada de senha |
-| RFID RC522 | Leitura de cartões e tags |
-| LCD 16x2 I2C | Exibição de mensagens e estados |
+| ESP32 | Unidade central de processamento e comunicação |
+| Teclado matricial 3x3 | Entrada de senha |
+| RFID RC522 | Identificação de cartões e tags |
 | Servo motor SG90 | Acionamento da trava |
-| LED | Indicação visual do estado de acesso |
-| Placa de expansão, protoboard e jumpers | Montagem e conexões |
+| LCD 16x2 I2C | Exibição de informações |
+| LED | Indicação visual de estado |
 
-**Controlador:** ESP32  
-**Linguagem:** C++  
-**Ambiente de desenvolvimento:** Arduino IDE
+## Arquitetura do sistema
 
-*Os detalhes de pinagem e alimentação devem ser consultados no esquema elétrico atualizado do protótipo.*
+O ESP32 atua como controlador principal e servidor web.
 
-## Funcionamento e autenticação
+O sistema possui dois meios de interação:
 
-O sistema utiliza uma lógica central de controle para processar as solicitações de acesso.
+1. **Interação física:** realizada pelo teclado matricial e pelo leitor RFID.
+2. **Interação remota:** realizada por meio de uma interface web hospedada no próprio ESP32.
 
-### Autenticação por senha
+O microcontrolador cria uma rede Wi-Fi própria, permitindo que dispositivos conectados a ela acessem a interface de controle.
 
-1. O usuário digita a senha no teclado.
-2. Confirma a entrada utilizando `#`.
-3. O ESP32 verifica a senha informada.
-4. Se estiver correta, o acesso é liberado.
-5. Se estiver incorreta, uma tentativa inválida é contabilizada.
+## Conectividade
 
-### Autenticação por RFID
+O ESP32 opera em modo Access Point (AP), criando uma rede Wi-Fi chamada `Vault32`.
 
-1. O usuário aproxima o cartão ou tag do leitor RC522.
-2. O ESP32 realiza a leitura da identificação.
-3. A identificação é comparada com os cartões autorizados.
-4. O acesso é liberado ou negado conforme a validação.
-
-### Controle de acesso e bloqueio
-
-- Três tentativas inválidas consecutivas provocam bloqueio temporário.
-- O bloqueio tem duração de 30 segundos.
-- Durante a liberação, o servo realiza a abertura da trava.
-- O fechamento automático ocorre após 10 segundos.
-
-O LCD apresenta mensagens para orientar o usuário e informar o estado do equipamento.
-
-## Conectividade e interface web
-
-O ESP32 opera como um ponto de acesso Wi-Fi próprio (**Access Point**), identificado pela rede `Vault32`.
-
-Essa configuração permite que celulares e computadores se conectem diretamente ao equipamento, sem depender de um roteador externo.
-
-A interface web permite acompanhar o estado do sistema e interagir com as funcionalidades de controle disponíveis no firmware.
-
-Entre as funcionalidades previstas para a aplicação estão:
-
-- Consulta do estado atual do cofre.
-- Solicitação de abertura pela rede.
-- Consulta do histórico de eventos.
-- Controle administrativo do sistema.
-
-**Endereço de acesso:** `http://192.168.4.1`
-
-*As rotas HTTP, os parâmetros e os formatos de resposta serão documentados conforme a implementação efetivamente presente no firmware.*
-
-## Tecnologias utilizadas
-
-| Tecnologia | Aplicação |
+| Parâmetro | Configuração |
 |---|---|
-| C++ | Programação do ESP32 |
-| Arduino IDE | Desenvolvimento e gravação do firmware |
-| Wi-Fi | Comunicação entre ESP32 e cliente |
-| HTTP | Comunicação entre navegador e servidor embarcado |
-| I2C | Comunicação com o LCD |
-| SPI | Comunicação com o leitor RFID RC522 |
+| Modo de operação | Wi-Fi Access Point |
+| SSID | Vault32 |
+| Endereço IP | 192.168.4.1 |
+| Servidor | HTTP |
+| Porta | 80 |
 
-## Limitações conhecidas
+Após conectar um dispositivo à rede criada pelo ESP32, a interface pode ser acessada pelo navegador através do endereço:
 
-O Vault32 é um protótipo acadêmico, não um dispositivo de segurança pronto para uso comercial.
+`http://192.168.4.1`
 
-Entre os pontos que precisam ser considerados estão:
+## Interface web e rotas HTTP
 
-- A resistência mecânica do servo SG90 é limitada.
-- A proteção da comunicação HTTP precisa ser aprimorada para aplicações reais.
-- A persistência dos registros e das credenciais depende da implementação de armazenamento não volátil.
-- O controle de usuários e permissões pode ser expandido.
-- A interface e os mecanismos de autenticação podem receber melhorias adicionais.
+A aplicação web permite consultar o estado do sistema e enviar comandos de controle.
 
-## Melhorias futuras
+| Rota | Método | Descrição |
+|---|---|---|
+| `/` | GET | Exibe a interface web |
+| `/estado` | GET | Retorna informações do estado atual em JSON |
+| `/abrir?s=...` | GET | Solicita abertura mediante autenticação |
+| `/desbloquear?s=...` | GET | Solicita desbloqueio administrativo |
 
-- Aprimoramento da interface web.
-- Organização e expansão do histórico de eventos.
-- Integração com Telegram para notificações.
-- Melhorias nos mecanismos de autenticação e segurança.
-- Gerenciamento de usuários e permissões.
+A interface consulta periodicamente a rota `/estado` para atualizar as informações exibidas.
 
-## Repositório
+## Firmware e lógica de funcionamento
 
-Código-fonte, documentação e histórico de desenvolvimento:
+O firmware foi desenvolvido em C++ utilizando a Arduino IDE e bibliotecas para integração dos módulos.
 
-[GitHub — cofre-inteligente-esp32](https://github.com/ols29/cofre-inteligente-esp32)
+O sistema trabalha com três estados principais:
 
-## Uso de inteligência artificial
+- **FECHADO:** estado normal, com a trava fechada.
+- **ABERTO:** estado em que o servo aciona a abertura.
+- **BLOQUEADO:** estado ativado após três tentativas inválidas.
 
-Ferramentas de inteligência artificial generativa foram utilizadas como apoio à organização da documentação e ao esclarecimento de dúvidas conceituais. A equipe é responsável pela revisão, compreensão e validação das funcionalidades e do código apresentados no projeto.
+Após uma autenticação válida, o servo é acionado e a abertura permanece ativa por aproximadamente 10 segundos, retornando automaticamente ao estado fechado.
+
+Quando são registradas três tentativas inválidas, o sistema entra em bloqueio temporário por 30 segundos.
+
+A autenticação pode ocorrer por senha no teclado ou por identificação de um cartão RFID autorizado.
+
+## Registro e monitoramento
+
+O firmware utiliza a comunicação serial para apresentar informações e eventos de funcionamento durante a execução.
+
+A interface web disponibiliza a consulta do estado atual, quantidade de tentativas inválidas e tempo restante de bloqueio, quando aplicável.
+
+## Estrutura do projeto
+
+```text
+Vault32/
+├── README.md
+└── firmware/
+    └── Vault32.ino
