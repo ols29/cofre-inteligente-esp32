@@ -120,20 +120,19 @@ A interface web disponibiliza a consulta do estado atual, quantidade de tentativ
 
 ```text
 cofre-inteligente-esp32/
+│
 ├── docs/
 │   ├── apresentacao-roteiro.md
-│   ├── arquitetura.svg
-│   ├── checklist-etapa1.md
 │   └── proposta-etapa1.md
+│
 ├── src/
-│   ├── client/
-│   │   ├── app.js
-│   │   └── index.html
 │   └── esp32/
 │       ├── esp32_server/
 │       │   └── esp32_server.ino
+│       │
 │       └── etapa1_prova_conceito/
 │           └── etapa1_prova_conceito.ino
+│
 ├── .gitignore
 └── README.md
 ```
