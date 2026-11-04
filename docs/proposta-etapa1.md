@@ -1,79 +1,97 @@
-# Proposta de tema: Etapa 1
+# Proposta de Projeto — Vault32
 
-**Disciplina:** Conectividade em Sistemas Ciberfísicos, PUCPR
-**Título:** Cofre inteligente com autenticação local e controle em rede
+**Disciplina:** Conectividade em Sistemas Ciberfísicos — PUCPR  
+**Título:** Vault32 — Sistema Inteligente de Controle de Acesso
 
 ## Integrantes
 
-Gustavo, Luiz, Nicolas, Oliver.
+- Luiz
+- Gustavo
+- Nicolas
+- Oliver
+- Enzo
 
-## As três perguntas da seção 3.1
+## 1. Problema e objetivo
 
-**1. Que problema real podemos monitorar com um sensor?**
+O projeto Vault32 propõe o desenvolvimento de um sistema de controle de acesso físico utilizando o microcontrolador ESP32.
 
-Armários e cofres trancados por chave física não registram nada. Não se sabe quem abriu, quando, nem quantas tentativas malsucedidas houve antes, nem em que condições o conteúdo está guardado. O teclado matricial monitora a entrada de credencial e um sensor infravermelho de obstáculo indica se há algo armazenado.
+A solução busca oferecer uma alternativa de autenticação e controle de acesso por meio de senha e identificação RFID, permitindo também o monitoramento do estado do sistema e o envio de comandos através de uma interface web.
 
-**2. Que ação corretiva podemos disparar com um atuador?**
+## 2. Solução proposta
 
-O travamento e destravamento por servo motor, o bloqueio temporário após tentativas repetidas, e o estado exibido em display OLED no próprio equipamento, com LEDs indicando a situação da trava.
+O ESP32 atua como controlador principal e servidor HTTP, integrando os componentes físicos e a comunicação em rede.
 
-**3. Como os dados e comandos serão trocados pela rede?**
+O sistema oferece duas formas de autenticação física:
 
-O ESP32 opera como servidor HTTP na porta 80, em modo Access Point. A aplicação cliente consulta o estado e o registro de eventos, e envia comandos de travamento, tudo por rotas REST em JSON.
+- Digitação de senha por meio de um teclado matricial 3x3.
+- Identificação de cartões ou tags autorizados por meio do módulo RFID RC522.
 
-## Escopo
+Uma interface web hospedada no próprio ESP32 permite consultar o estado do sistema e solicitar operações de controle.
 
-**Dentro do escopo:**
+## 3. Componentes e tecnologias
 
-- Autenticação por senha em teclado matricial 4x4
-- Trava por servo motor com fechamento automático temporizado
-- Bloqueio de 30 segundos após três tentativas incorretas
-- Detecção de ocupação do compartimento por sensor infravermelho
-- Display OLED com o estado local e a ocupação do compartimento
-- Servidor HTTP no ESP32 em modo Access Point
-- Interface web para consulta de estado, envio de comandos e visualização do registro de eventos
-- Registro dos últimos 20 eventos em memória, com origem e instante
-
-**Fora do escopo (declarado deliberadamente):**
-
-- Persistência em banco de dados ou serviço externo
-- Placa de circuito impresso dedicada
-- HTTPS e autenticação por token
-- Cartão de aproximação
-
-## Referências consultadas
-
-O projeto foi desenvolvido pela equipe. Os repositórios abaixo foram consultados como referência de arquitetura e boas práticas de montagem, sem reaproveitamento de código:
-
-- Hotsunlok/ESP32-smart-door-system: organização da documentação e ideia do temporizador visível de fechamento automático
-- lamkhanhnha353/IoT_smart-locker: validação independente do mapeamento de pinos, lógica de entrada de PIN e uso de DHT11 com alarme térmico
-- MobiXaiph/Door-lock-System-with-Keypad: validação da prova de conceito local com teclado, servo e realimentação visual e sonora
-- RohanKini18/ESP32-Servo-Motor-controller-Captive-portal: operação em modo Access Point sem roteador e cuidados de alimentação do servo
-
-Dois projetos foram consultados como contraexemplo deliberado. Em ambos o ESP32 atua apenas como cliente de um serviço externo, o que não atende ao requisito da seção 4.3 do regulamento:
-
-- lamkhanhnha353/IoT_smart-locker: telemetria por MQTT em broker público
-- Dubemchukwu/Iot-Door-Lock-System: backend hospedado em nuvem intermediando o painel
-
-## Cronograma
-
-| Etapa | Entrega |
+| Componente | Aplicação |
 |---|---|
-| 1. Planejamento e arquitetura | Proposta, repositório, diagrama, prova de conceito local |
-| 2. Comunicação e firmware servidor | Servidor HTTP no ESP32, rotas validadas via cURL |
-| 3. Integração final | Interface cliente, testes de falha, apresentação |
+| ESP32 | Processamento e conectividade |
+| Teclado matricial 3x3 | Entrada de senha |
+| RFID RC522 | Identificação de cartões e tags |
+| Servo motor SG90 | Acionamento da trava |
+| LCD 16x2 I2C | Exibição de informações |
+| LED | Indicação visual do estado |
 
-## Melhorias planejadas (etapas 2 e 3)
+**Tecnologias:** C++, Arduino IDE, Wi-Fi, HTTP e servidor WebServer.
 
-Evolução do cofre para um controle de acesso multiusuário, a ser construído nas próximas etapas:
+## 4. Funcionamento do sistema
 
-- Cadastro de usuários com papéis (administrador e comum)
-- Administração pelo admin: reset de senha, criar e remover usuários, gerenciar funções
-- Usuários temporários, com validade
-- Liberação por horário
-- Interface web protegida por autenticação, com bloqueio por tentativas (lockout)
-- Acionamento e controle de acesso da porta pelo teclado e pela interface web
+O sistema possui três estados principais:
 
-## Repositório
+- **FECHADO:** condição normal, com a trava fechada.
+- **ABERTO:** condição em que o servo motor aciona a abertura.
+- **BLOQUEADO:** condição ativada após três tentativas inválidas.
 
-https://github.com/ols29/cofre-inteligente-esp32
+Após uma autenticação válida, a trava permanece aberta por aproximadamente 10 segundos e retorna automaticamente ao estado fechado.
+
+Depois de três tentativas inválidas, o sistema realiza um bloqueio temporário de 30 segundos.
+
+O desbloqueio administrativo também pode ser solicitado pela interface web.
+
+## 5. Comunicação em rede
+
+O ESP32 opera em modo Access Point, criando uma rede Wi-Fi própria.
+
+| Parâmetro | Configuração |
+|---|---|
+| Modo | Access Point |
+| Nome da rede | Vault32 |
+| Endereço IP | 192.168.4.1 |
+| Protocolo | HTTP |
+| Porta | 80 |
+
+A interface web utiliza as seguintes rotas:
+
+- `GET /`: disponibiliza a interface web.
+- `GET /estado`: consulta o estado do sistema.
+- `GET /abrir?s=...`: solicita abertura mediante autenticação.
+- `GET /desbloquear?s=...`: solicita desbloqueio administrativo.
+
+A consulta de estado permite acompanhar a situação da trava, as tentativas inválidas e o tempo restante de bloqueio.
+
+## 6. Escopo e limitações
+
+O projeto contempla autenticação física, acionamento da trava, monitoramento local e comunicação HTTP por meio do servidor hospedado no ESP32.
+
+O firmware registra informações de funcionamento pela comunicação serial. Não há, na versão atual, armazenamento persistente de eventos nem histórico de eventos disponível na interface web.
+
+Também não estão implementados banco de dados externo, comunicação HTTPS ou notificações por serviços externos.
+
+## 7. Melhorias futuras
+
+- Implementar armazenamento persistente de eventos.
+- Aprimorar a segurança da autenticação e da comunicação.
+- Desenvolver notificações remotas.
+- Melhorar a interface de controle.
+- Avaliar a integração de sensores ambientais, conforme os requisitos da disciplina.
+
+## 8. Considerações finais
+
+O Vault32 integra sistemas embarcados, acionamento físico e comunicação em rede. O projeto utiliza o ESP32 como controlador e servidor HTTP, oferecendo autenticação por senha e RFID, além de gerenciamento por uma interface web.
