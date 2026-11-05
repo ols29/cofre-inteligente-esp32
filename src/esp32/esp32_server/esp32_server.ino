@@ -8,19 +8,20 @@
 #include <MFRC522.h>
 
 // ===== CONFIGURAÇÕES =====
-const char* SENHA        = "4567";     // digite no teclado ou na web
+const char* SENHA        = "4567";     // use só 0,4,5,6,7,8,9
 const char* SENHA_ADMIN  = "9090";     // desbloqueia pelo navegador
 const char* WIFI_SSID    = "Vault32";
 const char* WIFI_PASS    = "vault1234";
 const int   MAX_ERROS    = 3;
-const unsigned long TEMPO_ABERTO   = 10000; // 10 s
-const unsigned long TEMPO_BLOQUEIO = 30000; // 30 s
+const unsigned long TEMPO_ABERTO   = 10000;  // 10 s
+const unsigned long TEMPO_BLOQUEIO = 30000;  // 30 s
 const int ANG_FECHADO = 0;
 const int ANG_ABERTO  = 90;
 
-// UIDs autorizados em HEX maiúsculo
+// UIDs autorizados (formato: bytes em HEX, maiúsculos, separados por espaço)
+// Só o cartão branco abre. A tag azul (8B 1A BE 06) fica de fora de propósito: é negada.
 const char* UIDS_AUTORIZADOS[] = {
-  "84 17 D8 06" // seu cartao autorizado
+  "84 17 D8 06"    // cartão branco (autorizado)
 };
 const int N_UIDS = sizeof(UIDS_AUTORIZADOS) / sizeof(UIDS_AUTORIZADOS[0]);
 
@@ -44,27 +45,33 @@ char teclas[LINHAS][COLUNAS] = {
 byte pinosLinhas[LINHAS]   = {32, 14, 27};
 byte pinosColunas[COLUNAS] = {26, 25, 33};
 
-// ===== OBJETOS =====
 Adafruit_Keypad teclado = Adafruit_Keypad(
   makeKeymap(teclas), pinosLinhas, pinosColunas, LINHAS, COLUNAS);
 Servo servo;
 WebServer server(80);
-LiquidCrystal_I2C lcd(0x27, 16, 2); // se seu display usar 0x3F, troque aqui
+LiquidCrystal_I2C *lcd = nullptr;
 MFRC522 rfid(RFID_SS, RFID_RST);
+bool rfidOk = false;
 
-// ===== ESTADO =====
 enum Estado { FECHADO, ABERTO, BLOQUEADO };
 Estado estado = FECHADO;
 int erros = 0;
 unsigned long tAberto = 0, tBloqueio = 0;
 String digitado = "";
 
+const int NLOG = 8;
+String logs[NLOG];
+int nlogs = 0;
+
 String ultimaL1 = "", ultimaL2 = "";
 String msgL1 = "", msgL2 = "";
 unsigned long tMsg = 0;
 
 void registrar(String msg) {
-  Serial.println(String(millis() / 1000) + "s: " + msg);
+  String linha = String(millis() / 1000) + "s: " + msg;
+  if (nlogs < NLOG) logs[nlogs++] = linha;
+  else { for (int i = 1; i < NLOG; i++) logs[i-1] = logs[i]; logs[NLOG-1] = linha; }
+  Serial.println(linha);
 }
 
 String pad16(String s) {
@@ -73,12 +80,39 @@ String pad16(String s) {
 }
 
 void mostrarTemp(String a, String b) {
-  msgL1 = a;
-  msgL2 = b;
-  tMsg = millis() + 2000;
+  msgL1 = a; msgL2 = b; tMsg = millis() + 2000;
+}
+
+void iniciarLCD() {
+  Wire.begin(PINO_SDA, PINO_SCL);
+  byte enderecos[2] = {0x27, 0x3F};
+  for (int i = 0; i < 2; i++) {
+    Wire.beginTransmission(enderecos[i]);
+    if (Wire.endTransmission() == 0) {
+      lcd = new LiquidCrystal_I2C(enderecos[i], 16, 2);
+      lcd->init();
+      lcd->backlight();
+      Serial.print("LCD encontrado em 0x");
+      Serial.println(enderecos[i], HEX);
+      return;
+    }
+  }
+  Serial.println("LCD nao encontrado (o Vault32 segue sem display)");
+}
+
+void iniciarRFID() {
+  SPI.begin(RFID_SCK, RFID_MISO, RFID_MOSI, RFID_SS);
+  rfid.PCD_Init();
+  delay(50);
+  byte v = rfid.PCD_ReadRegister(MFRC522::VersionReg);
+  rfidOk = (v != 0x00 && v != 0xFF);
+  Serial.print("RC522 versao: 0x");
+  Serial.println(v, HEX);
+  if (!rfidOk) Serial.println("RC522 nao respondeu (o Vault32 segue sem RFID)");
 }
 
 void desenharLCD() {
+  if (!lcd) return;
   String l1, l2;
   if (millis() < tMsg) {
     l1 = msgL1;
@@ -100,18 +134,14 @@ void desenharLCD() {
     for (unsigned int i = 0; i < digitado.length(); i++) l2 += '*';
     if (erros > 0) l2 += " E" + String(erros) + "/" + String(MAX_ERROS);
   }
-
   l1 = pad16(l1);
   l2 = pad16(l2);
-  if (l1 != ultimaL1) { lcd.setCursor(0, 0); lcd.print(l1); ultimaL1 = l1; }
-  if (l2 != ultimaL2) { lcd.setCursor(0, 1); lcd.print(l2); ultimaL2 = l2; }
+  if (l1 != ultimaL1) { lcd->setCursor(0, 0); lcd->print(l1); ultimaL1 = l1; }
+  if (l2 != ultimaL2) { lcd->setCursor(0, 1); lcd->print(l2); ultimaL2 = l2; }
 }
 
 void abrir(String origem) {
-  estado = ABERTO;
-  erros = 0;
-  tAberto = millis();
-  tMsg = 0;
+  estado = ABERTO; erros = 0; tAberto = millis(); tMsg = 0;
   servo.write(ANG_ABERTO);
   digitalWrite(PINO_LED, HIGH);
   registrar("ABERTO (" + origem + ")");
@@ -128,8 +158,7 @@ void errar(String origem) {
   erros++;
   registrar("Acesso negado (" + origem + ") " + String(erros) + "/" + String(MAX_ERROS));
   if (erros >= MAX_ERROS) {
-    estado = BLOQUEADO;
-    tBloqueio = millis();
+    estado = BLOQUEADO; tBloqueio = millis();
     servo.write(ANG_FECHADO);
     digitalWrite(PINO_LED, LOW);
     registrar("BLOQUEADO");
@@ -137,8 +166,7 @@ void errar(String origem) {
 }
 
 void desbloquear(String origem) {
-  estado = FECHADO;
-  erros = 0;
+  estado = FECHADO; erros = 0;
   registrar("DESBLOQUEADO (" + origem + ")");
 }
 
@@ -156,6 +184,7 @@ bool uidAutorizado(String uid) {
 }
 
 void lerRFID() {
+  if (!rfidOk) return;
   if (!rfid.PICC_IsNewCardPresent() || !rfid.PICC_ReadCardSerial()) return;
 
   String uid = "";
@@ -166,7 +195,7 @@ void lerRFID() {
     if (i > 0) uid += " ";
     uid += h;
   }
-  Serial.println("UID lido: " + uid);
+  Serial.println("UID: " + uid);
   rfid.PICC_HaltA();
   rfid.PCD_StopCrypto1();
 
@@ -191,6 +220,7 @@ const char PAGINA[] PROGMEM = R"rawliteral(
 body{font-family:sans-serif;max-width:420px;margin:20px auto;padding:0 12px;text-align:center}
 #st{font-size:2em;font-weight:bold;padding:14px;border-radius:10px;color:#fff;background:#888}
 input,button{font-size:1.1em;padding:10px;margin:6px;width:90%}
+pre{text-align:left;background:#eee;padding:8px;font-size:.85em}
 </style></head><body>
 <h2>Vault32</h2>
 <div id="st">...</div>
@@ -199,6 +229,7 @@ input,button{font-size:1.1em;padding:10px;margin:6px;width:90%}
 <button onclick="acao('abrir')">Abrir</button>
 <button onclick="acao('desbloquear')">Desbloquear (senha admin)</button>
 <p id="msg"></p>
+<h4>Histórico</h4><pre id="log"></pre>
 <script>
 function acao(a){
   fetch('/'+a+'?s='+encodeURIComponent(document.getElementById('s').value))
@@ -209,7 +240,8 @@ function atualiza(){
     var e=document.getElementById('st');
     e.innerText=d.estado;
     e.style.background=d.estado=='ABERTO'?'#2a9d3a':(d.estado=='BLOQUEADO'?'#c0392b':'#555');
-    document.getElementById('inf').innerText='Erros: '+d.erros+'/'+d.max+(d.restante>0?' | '+d.restante+'s restantes':'');
+    document.getElementById('inf').innerText='Erros: '+d.erros+'/'+d.max+(d.restante>0?'  |  '+d.restante+'s restantes':'');
+    document.getElementById('log').innerText=d.log.join('\n');
   }).catch(()=>{});
 }
 setInterval(atualiza,1000);atualiza();
@@ -221,7 +253,9 @@ void hEstado() {
   if (estado == ABERTO) restante = (TEMPO_ABERTO - (millis() - tAberto)) / 1000 + 1;
   if (estado == BLOQUEADO) restante = (TEMPO_BLOQUEIO - (millis() - tBloqueio)) / 1000 + 1;
   String j = "{\"estado\":\"" + nomeEstado() + "\",\"erros\":" + String(erros) +
-             ",\"max\":" + String(MAX_ERROS) + ",\"restante\":" + String(restante) + "}";
+             ",\"max\":" + String(MAX_ERROS) + ",\"restante\":" + String(restante) + ",\"log\":[";
+  for (int i = 0; i < nlogs; i++) { if (i) j += ","; j += "\"" + logs[i] + "\""; }
+  j += "]}";
   server.send(200, "application/json", j);
 }
 
@@ -239,23 +273,13 @@ void hDesbloquear() {
 void setup() {
   Serial.begin(115200);
   pinMode(PINO_LED, OUTPUT);
-
   servo.setPeriodHertz(50);
   servo.attach(PINO_SERVO, 500, 2400);
   servo.write(ANG_FECHADO);
-
   teclado.begin();
+  iniciarLCD();
+  iniciarRFID();
 
-  // LCD direto sem ponteiro
-  Wire.begin(PINO_SDA, PINO_SCL);
-  lcd.init();
-  lcd.backlight();
-
-  // RFID direto
-  SPI.begin(RFID_SCK, RFID_MISO, RFID_MOSI, RFID_SS);
-  rfid.PCD_Init();
-
-  // Wi-Fi SoftAP e rotas
   WiFi.softAP(WIFI_SSID, WIFI_PASS);
   server.on("/", []() { server.send_P(200, "text/html", PAGINA); });
   server.on("/estado", hEstado);
@@ -263,6 +287,9 @@ void setup() {
   server.on("/desbloquear", hDesbloquear);
   server.begin();
 
+  Serial.println("Vault32 iniciado");
+  Serial.print("Wi-Fi: "); Serial.print(WIFI_SSID);
+  Serial.print("  IP: "); Serial.println(WiFi.softAPIP());
   registrar("Sistema iniciado");
   desenharLCD();
 }
@@ -275,11 +302,11 @@ void loop() {
     keypadEvent e = teclado.read();
     if (e.bit.EVENT != KEY_JUST_PRESSED) continue;
     char k = (char)e.bit.KEY;
+    Serial.print("Tecla: "); Serial.println(k);
     if (estado == BLOQUEADO) continue;
     if (k == '*') digitado = "";
     else if (k == '#') {
-      if (digitado == SENHA) abrir("teclado");
-      else errar("teclado");
+      if (digitado == SENHA) abrir("teclado"); else errar("teclado");
       digitado = "";
     } else if (digitado.length() < 8) digitado += k;
     desenharLCD();
@@ -291,9 +318,6 @@ void loop() {
   if (estado == BLOQUEADO && millis() - tBloqueio >= TEMPO_BLOQUEIO) desbloquear("tempo");
 
   static unsigned long tLcd = 0;
-  if (millis() - tLcd > 300) {
-    tLcd = millis();
-    desenharLCD();
-  }
+  if (millis() - tLcd > 300) { tLcd = millis(); desenharLCD(); }
   delay(5);
 }
